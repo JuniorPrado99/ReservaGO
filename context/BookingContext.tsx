@@ -1,27 +1,69 @@
-import React, { createContext, useState, useContext } from 'react';
+import React, { createContext, useState, useContext, useEffect } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAuth } from './AuthContext';
 
-// Definimos o que é uma Reserva
 interface Booking {
   propertyId: string;
   date: string;
   status: 'reservada' | 'realizada';
 }
 
-const BookingContext = createContext<any>(null);
+interface BookingContextData {
+  bookings: Booking[];
+  addBooking: (propertyId: string) => void;
+}
+
+const BookingContext = createContext<BookingContextData>({} as BookingContextData);
+
+const STORAGE_KEY = '@reservago:bookings';
 
 export function BookingProvider({ children }: { children: React.ReactNode }) {
-  // Começamos com uma lista vazia de reservas
   const [bookings, setBookings] = useState<Booking[]>([]);
+  const { user } = useAuth();
 
-  // Função para adicionar uma nova reserva
+  // Carrega reservas do AsyncStorage quando o usuário loga
+  useEffect(() => {
+    if (user) {
+      loadBookings();
+    } else {
+      setBookings([]);
+    }
+  }, [user]);
+
+  const loadBookings = async () => {
+    try {
+      const stored = await AsyncStorage.getItem(`${STORAGE_KEY}:${user?.id}`);
+      if (stored) setBookings(JSON.parse(stored));
+    } catch (e) {
+      console.error('Erro ao carregar reservas:', e);
+    }
+  };
+
+  const saveBookings = async (newBookings: Booking[]) => {
+    try {
+      await AsyncStorage.setItem(
+        `${STORAGE_KEY}:${user?.id}`,
+        JSON.stringify(newBookings)
+      );
+    } catch (e) {
+      console.error('Erro ao salvar reservas:', e);
+    }
+  };
+
   const addBooking = (propertyId: string) => {
     const newBooking: Booking = {
       propertyId,
-      // Gera a data de hoje formatada
-      date: new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' }),
-      status: 'reservada'
+      date: new Date().toLocaleDateString('pt-BR', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+      }),
+      status: 'reservada',
     };
-    setBookings(prev => [newBooking, ...prev]);
+
+    const updated = [newBooking, ...bookings];
+    setBookings(updated);
+    saveBookings(updated);
   };
 
   return (
@@ -31,5 +73,4 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
-// Hook para usarmos as reservas em qualquer tela
 export const useBookings = () => useContext(BookingContext);
