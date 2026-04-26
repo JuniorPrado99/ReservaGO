@@ -1,0 +1,1 @@
+//usar futuramente cabanas do anfitriçao logadas
