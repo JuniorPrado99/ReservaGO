@@ -1,5 +1,5 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
-import { Alert } from 'react-native';
+import { Alert, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from './AuthContext';
 
@@ -47,13 +47,16 @@ export function FavoritesProvider({ children }: { children: React.ReactNode }) {
   };
 
   const toggleFavorite = (id: string) => {
-    // Bloqueia favorito para não logados
     if (!user) {
-      Alert.alert(
-        'Login necessário',
-        'Faça login para salvar seus lugares favoritos.',
-        [{ text: 'Cancelar', style: 'cancel' }]
-      );
+      if (Platform.OS === 'web') {
+        window.alert('Faça login para salvar seus lugares favoritos.');
+      } else {
+        Alert.alert(
+          'Login necessário',
+          'Faça login para salvar seus lugares favoritos.',
+          [{ text: 'Cancelar', style: 'cancel' }]
+        );
+      }
       return;
     }
 
