@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet, Text, View, ScrollView,
-  TouchableOpacity, TextInput, FlatList
+  TouchableOpacity, TextInput, FlatList,
+  BackHandler, Keyboard
 } from 'react-native';
 import { PropertyCard } from '../../components/PropertyCard';
 import { PROPERTIES } from '../../constants/Properties';
@@ -17,8 +18,25 @@ export default function HomeScreen() {
   const [selectedCategory, setSelectedCategory] = useState('Praia Privativa');
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
+  const inputRef = useRef<TextInput>(null);
 
-  // Resultados da busca — filtra por título e localização
+  useEffect(() => {
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (isSearching) {
+        cancelSearch();
+        return true;
+      }
+      return false;
+    });
+    return () => backHandler.remove();
+  }, [isSearching]);
+
+  const cancelSearch = () => {
+    setSearchQuery('');
+    setIsSearching(false);
+    Keyboard.dismiss();
+  };
+
   const searchResults = PROPERTIES.filter(item => {
     const query = searchQuery.toLowerCase();
     return (
@@ -26,13 +44,6 @@ export default function HomeScreen() {
       item.location.toLowerCase().includes(query)
     );
   });
-
-  const handleSearchFocus = () => setIsSearching(true);
-
-  const handleSearchClear = () => {
-    setSearchQuery('');
-    setIsSearching(false);
-  };
 
   const renderSection = (title: string, subCategoryName: string) => {
     const filtered = PROPERTIES.filter(
@@ -61,26 +72,33 @@ export default function HomeScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        {/* Barra de busca */}
-        <View style={styles.searchBar}>
-          <Search size={18} color="#6B7280" style={{ marginRight: 10 }} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Buscar por lugar ou destino..."
-            placeholderTextColor="#9CA3AF"
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            onFocus={handleSearchFocus}
-            returnKeyType="search"
-          />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={handleSearchClear}>
-              <X size={18} color="#6B7280" />
+        <View style={styles.searchRow}>
+          <View style={[styles.searchBar, isSearching && styles.searchBarActive]}>
+            <Search size={18} color="#6B7280" style={{ marginRight: 10 }} />
+            <TextInput
+              ref={inputRef}
+              style={styles.searchInput}
+              placeholder="Buscar por lugar ou destino..."
+              placeholderTextColor="#9CA3AF"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              onFocus={() => setIsSearching(true)}
+              returnKeyType="search"
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchQuery('')}>
+                <X size={18} color="#6B7280" />
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {isSearching && (
+            <TouchableOpacity onPress={cancelSearch} style={styles.cancelButton}>
+              <Text style={styles.cancelText}>Cancelar</Text>
             </TouchableOpacity>
           )}
         </View>
 
-        {/* Categorias — esconde durante busca */}
         {!isSearching && (
           <View style={styles.categoriesContainer}>
             {CATEGORIES.map((cat) => (
@@ -108,7 +126,6 @@ export default function HomeScreen() {
         )}
       </View>
 
-      {/* MODO BUSCA */}
       {isSearching ? (
         <View style={{ flex: 1 }}>
           {searchQuery.length === 0 ? (
@@ -129,12 +146,12 @@ export default function HomeScreen() {
               keyExtractor={item => item.id}
               contentContainerStyle={styles.searchResults}
               showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
               renderItem={({ item }) => <PropertyCard {...item} />}
             />
           )}
         </View>
       ) : (
-        /* MODO NORMAL — categorias */
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
@@ -183,13 +200,18 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 2,
   },
-  searchBar: {
+  searchRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFF',
     marginHorizontal: 20,
     marginBottom: 16,
     marginTop: 10,
+  },
+  searchBar: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF',
     paddingHorizontal: 15,
     paddingVertical: 12,
     borderRadius: 30,
@@ -201,10 +223,22 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#F3F4F6',
   },
+  searchBarActive: {
+    borderColor: '#2D5A27',
+  },
   searchInput: {
     flex: 1,
     fontSize: 14,
     color: '#1F2937',
+  },
+  cancelButton: {
+    marginLeft: 12,
+    paddingVertical: 6,
+  },
+  cancelText: {
+    fontSize: 15,
+    color: '#2D5A27',
+    fontWeight: '600',
   },
   categoriesContainer: {
     flexDirection: 'row',
