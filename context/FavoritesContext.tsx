@@ -8,7 +8,10 @@ interface FavoritesContextData {
   toggleFavorite: (id: string) => void;
 }
 
-const FavoritesContext = createContext<FavoritesContextData>({} as FavoritesContextData);
+const FavoritesContext = createContext<FavoritesContextData>({
+  favorites: [],
+  toggleFavorite: () => {},
+});
 
 const STORAGE_KEY = '@reservago:favorites';
 

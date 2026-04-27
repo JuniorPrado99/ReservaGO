@@ -6,15 +6,13 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import 'react-native-reanimated';
 
-// 1. Importação de todos os Gerenciadores de Dados (Contextos)
-import { AuthProvider } from '../context/AuthContext'; 
+import { AuthProvider } from '../context/AuthContext';
 import { BookingProvider } from '../context/BookingContext';
-import { FavoritesProvider } from '../context/FavoritesContext'; 
+import { FavoritesProvider } from '../context/FavoritesContext';
 import { useColorScheme } from '../components/useColorScheme';
 
 export { ErrorBoundary } from 'expo-router';
 
-// 2. AJUSTE: O app agora inicia nas abas (acesso convidado)
 export const unstable_settings = {
   initialRouteName: '(tabs)',
 };
@@ -27,21 +25,14 @@ export default function RootLayout() {
     ...FontAwesome.font,
   });
 
-  useEffect(() => {
-    if (error) throw error;
-  }, [error]);
-
-  useEffect(() => {
-    if (loaded) {
-      SplashScreen.hideAsync();
-    }
-  }, [loaded]);
+  useEffect(() => { if (error) throw error; }, [error]);
+  useEffect(() => { if (loaded) SplashScreen.hideAsync(); }, [loaded]);
 
   if (!loaded) return null;
 
   return (
     <AuthProvider>
-      <BookingProvider> 
+      <BookingProvider>
         <FavoritesProvider>
           <RootLayoutNav />
         </FavoritesProvider>
@@ -56,28 +47,12 @@ function RootLayoutNav() {
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <Stack initialRouteName="(tabs)">
-        {/* Acesso principal sem login */}
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        
-        {/* Telas de Autenticação */}
         <Stack.Screen name="login" options={{ headerShown: false }} />
         <Stack.Screen name="select-role" options={{ headerShown: false }} />
-
-        {/* --- NOVO: Fluxo do Anfitrião --- */}
-        <Stack.Screen 
-          name="create-listing" 
-          options={{ 
-            title: 'Anunciar Cabana', 
-            headerShown: true, // Mostrar header para ter o botão de voltar automático
-            headerTitleStyle: { fontWeight: 'bold' },
-            headerTintColor: '#2D5A27' 
-          }} 
-        />
-
-        {/* Telas de conteúdo e suporte */}
+        <Stack.Screen name="create-listing" options={{ title: 'Anunciar Cabana', headerShown: true, headerTitleStyle: { fontWeight: 'bold' }, headerTintColor: '#2D5A27' }} />
         <Stack.Screen name="details" options={{ headerShown: false }} />
         <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
-        
         <Stack.Screen name="admin-dashboard" options={{ headerShown: false }} />
       </Stack>
     </ThemeProvider>
