@@ -70,6 +70,23 @@ npx expo start --offline
 ````
 
 ---
+## Dependências adicionais
+
+Algumas dependências nativas precisam ser instaladas separadamente com o Expo CLI para garantir compatibilidade com a versão correta do SDK:
+
+| Pacote | Motivo |
+|---|---|
+| `@react-native-async-storage/async-storage` | Persistência local de favoritos e reservas por usuário entre sessões do app |
+
+Para instalar:
+
+```bash
+npx expo install @react-native-async-storage/async-storage
+```
+
+> Sempre use `npx expo install` (não `npm install`) para pacotes nativos — o Expo garante a versão compatível com o SDK atual.
+
+---
 
 ## Estrutura do projeto
 
@@ -77,7 +94,7 @@ npx expo start --offline
 ReservaGO/
 ├── app/              # Telas e rotas (Expo Router)
 ├── components/       # Componentes reutilizáveis (botões, cards, formulários)
-├── context/          # Estado global (autenticação, reservas)
+├── context/          # Estado global (autenticação, reservas, favoritos)
 ├── constants/        # Cores, fontes, textos fixos
 ├── assets/           # Imagens e ícones
 ├── app.json          # Configuração do Expo

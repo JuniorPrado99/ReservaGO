@@ -11,9 +11,14 @@ interface Booking {
 interface BookingContextData {
   bookings: Booking[];
   addBooking: (propertyId: string) => void;
+  cancelBooking: (propertyId: string) => void;
 }
 
-const BookingContext = createContext<BookingContextData>({} as BookingContextData);
+const BookingContext = createContext<BookingContextData>({
+  bookings: [],
+  addBooking: () => {},
+  cancelBooking: () => {},
+});
 
 const STORAGE_KEY = '@reservago:bookings';
 
@@ -21,7 +26,6 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const { user } = useAuth();
 
-  // Carrega reservas do AsyncStorage quando o usuário loga
   useEffect(() => {
     if (user) {
       loadBookings();
@@ -60,14 +64,25 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
       }),
       status: 'reservada',
     };
-
     const updated = [newBooking, ...bookings];
     setBookings(updated);
     saveBookings(updated);
   };
 
+  const cancelBooking = (propertyId: string) => {
+    setBookings(prev => {
+      const idx = prev.findIndex(
+        b => b.propertyId === propertyId && b.status === 'reservada'
+      );
+      if (idx === -1) return prev;
+      const updated = prev.filter((_, i) => i !== idx);
+      saveBookings(updated);
+      return updated;
+    });
+  };
+
   return (
-    <BookingContext.Provider value={{ bookings, addBooking }}>
+    <BookingContext.Provider value={{ bookings, addBooking, cancelBooking }}>
       {children}
     </BookingContext.Provider>
   );
