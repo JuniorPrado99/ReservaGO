@@ -23,7 +23,7 @@ export default function TabLayout() {
         // Define a cor do ícone quando a aba está selecionada
         tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
         // Mantém o título no topo por padrão (exceto na Home)
-        headerShown: true,
+        headerShown: false,
         tabBarStyle: { 
           height: 65, 
           paddingBottom: 10,

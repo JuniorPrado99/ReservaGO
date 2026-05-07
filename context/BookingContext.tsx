@@ -1,4 +1,6 @@
-import React, { createContext, useState, useContext } from 'react';
+import React, { createContext, useState, useContext, useEffect } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAuth } from './AuthContext';
 
 interface Booking {
   propertyId: string;
@@ -12,10 +14,45 @@ interface BookingContextData {
   cancelBooking: (propertyId: string) => void;
 }
 
-const BookingContext = createContext<BookingContextData>({} as BookingContextData);
+const BookingContext = createContext<BookingContextData>({
+  bookings: [],
+  addBooking: () => {},
+  cancelBooking: () => {},
+});
+
+const STORAGE_KEY = '@reservago:bookings';
 
 export function BookingProvider({ children }: { children: React.ReactNode }) {
   const [bookings, setBookings] = useState<Booking[]>([]);
+  const { user } = useAuth();
+
+  useEffect(() => {
+    if (user) {
+      loadBookings();
+    } else {
+      setBookings([]);
+    }
+  }, [user]);
+
+  const loadBookings = async () => {
+    try {
+      const stored = await AsyncStorage.getItem(`${STORAGE_KEY}:${user?.id}`);
+      if (stored) setBookings(JSON.parse(stored));
+    } catch (e) {
+      console.error('Erro ao carregar reservas:', e);
+    }
+  };
+
+  const saveBookings = async (newBookings: Booking[]) => {
+    try {
+      await AsyncStorage.setItem(
+        `${STORAGE_KEY}:${user?.id}`,
+        JSON.stringify(newBookings)
+      );
+    } catch (e) {
+      console.error('Erro ao salvar reservas:', e);
+    }
+  };
 
   const addBooking = (propertyId: string) => {
     const newBooking: Booking = {
@@ -27,17 +64,20 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
       }),
       status: 'reservada',
     };
-    setBookings(prev => [newBooking, ...prev]);
+    const updated = [newBooking, ...bookings];
+    setBookings(updated);
+    saveBookings(updated);
   };
 
-  // Remove a primeira reserva ativa encontrada para aquele propertyId
   const cancelBooking = (propertyId: string) => {
     setBookings(prev => {
       const idx = prev.findIndex(
         b => b.propertyId === propertyId && b.status === 'reservada'
       );
       if (idx === -1) return prev;
-      return prev.filter((_, i) => i !== idx);
+      const updated = prev.filter((_, i) => i !== idx);
+      saveBookings(updated);
+      return updated;
     });
   };
 
