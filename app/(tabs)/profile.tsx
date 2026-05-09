@@ -1,6 +1,22 @@
 import React from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView } from 'react-native';
-import { User, Settings, CreditCard, Bell, ShieldCheck, LogOut, ChevronRight, LogIn, LayoutDashboard } from 'lucide-react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Image,
+  TouchableOpacity,
+  ScrollView,
+} from 'react-native';
+import {
+  User,
+  Settings,
+  Bell,
+  ShieldCheck,
+  LogOut,
+  ChevronRight,
+  LogIn,
+  LayoutDashboard,
+} from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../context/AuthContext';
 
@@ -8,7 +24,17 @@ export default function ProfileScreen() {
   const router = useRouter();
   const { user, logout } = useAuth();
 
-  const MenuItem = ({ icon: Icon, title, subtitle, onPress }: any) => (
+  const MenuItem = ({
+    icon: Icon,
+    title,
+    subtitle,
+    onPress,
+  }: {
+    icon: any;
+    title: string;
+    subtitle?: string;
+    onPress: () => void;
+  }) => (
     <TouchableOpacity style={styles.menuItem} onPress={onPress}>
       <View style={styles.menuIconContainer}>
         <Icon size={22} color="#4B5563" />
@@ -31,7 +57,8 @@ export default function ProfileScreen() {
           </View>
           <Text style={styles.headerTitle}>Seu Perfil</Text>
           <Text style={styles.guestSubtitle}>
-            Faça login para planejar sua próxima viagem, gerenciar suas cabanas e ver suas mensagens.
+            Faça login para planejar sua próxima viagem, gerenciar suas cabanas
+            e ver suas mensagens.
           </Text>
 
           <TouchableOpacity
@@ -64,37 +91,32 @@ export default function ProfileScreen() {
         </View>
       </View>
 
-      {/* SEÇÃO HOSPEDAGEM */}
-      <View style={styles.section}>
-        <Text style={styles.sectionLabel}>Hospedagem</Text>
+      {/* SEÇÃO HOSPEDAGEM
+          - Anfitrião e Admin: veem "Anunciar nova cabana" + "Painel de Gerenciamento"
+          - Hóspede: NÃO vê o botão "Anuncie sua cabana" aqui
+            (o botão para se tornar anfitrião virá em outra seção, no Grupo 2)
+      */}
+      {(user.role === 'anfitriao' || user.role === 'admin') && (
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>Hospedagem</Text>
 
-        {user.role === 'anfitriao' || user.role === 'admin' ? (
-          <>
-            <MenuItem
-              icon={Settings}
-              title="Anunciar nova cabana"
-              subtitle="Cadastre um novo imóvel no sistema"
-              onPress={() => router.push('../create-listing')}
-            />
-
-            <MenuItem
-              icon={ShieldCheck}
-              title="Painel de Gerenciamento"
-              subtitle="Ver reservas e editar anúncios"
-              onPress={() => router.push('../my-cabins')} // Ou outra tela que você já criou
-            />
-          </>
-        ) : (
           <MenuItem
             icon={Settings}
-            title="Anuncie sua cabana"
-            subtitle="Ganhe dinheiro alugando seu espaço"
-            onPress={() => router.push('../select-role')}
+            title="Anunciar nova cabana"
+            subtitle="Cadastre um novo imóvel no sistema"
+            onPress={() => router.push('../create-listing')}
           />
-        )}
-      </View>
 
-      {/* 👇 ADMIN (NOVO BLOCO NO LUGAR CERTO) */}
+          <MenuItem
+            icon={ShieldCheck}
+            title="Painel de Gerenciamento"
+            subtitle="Ver reservas e editar anúncios"
+            onPress={() => router.push('../my-cabins')}
+          />
+        </View>
+      )}
+
+      {/* SEÇÃO ADMIN — aparece somente para perfil admin */}
       {user.role === 'admin' && (
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>Administração</Text>
@@ -106,6 +128,25 @@ export default function ProfileScreen() {
           />
         </View>
       )}
+
+      {/* SEÇÃO GERAL — para todos os perfis logados */}
+      <View style={styles.section}>
+        <Text style={styles.sectionLabel}>Conta</Text>
+
+        <MenuItem
+          icon={Bell}
+          title="Notificações"
+          subtitle="Gerencie seus alertas"
+          onPress={() => {}}
+        />
+
+        <MenuItem
+          icon={ShieldCheck}
+          title="Privacidade"
+          subtitle="Controle seus dados"
+          onPress={() => {}}
+        />
+      </View>
 
       {/* LOGOUT */}
       <TouchableOpacity style={styles.logoutButton} onPress={logout}>
@@ -120,33 +161,112 @@ export default function ProfileScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
-  containerCenter: { flex: 1, backgroundColor: '#fff', justifyContent: 'center', padding: 30 },
+  containerCenter: {
+    flex: 1,
+    backgroundColor: '#fff',
+    justifyContent: 'center',
+    padding: 30,
+  },
   guestContent: { alignItems: 'center' },
-  iconCircle: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#F0F7F0', justifyContent: 'center', alignItems: 'center', marginBottom: 20 },
-  guestSubtitle: { fontSize: 16, color: '#6B7280', textAlign: 'center', marginBottom: 30, lineHeight: 22 },
-  loginButton: { flexDirection: 'row', backgroundColor: '#2D5A27', width: '100%', padding: 16, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+  iconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#F0F7F0',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  guestSubtitle: {
+    fontSize: 16,
+    color: '#6B7280',
+    textAlign: 'center',
+    marginBottom: 30,
+    lineHeight: 22,
+  },
+  loginButton: {
+    flexDirection: 'row',
+    backgroundColor: '#2D5A27',
+    width: '100%',
+    padding: 16,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   loginButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
 
   header: { paddingTop: 60, paddingHorizontal: 20, marginBottom: 25 },
-  headerTitle: { fontSize: 28, fontWeight: 'bold', color: '#1F2937', marginBottom: 20 },
-  userCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F9FAFB', padding: 15, borderRadius: 20, borderWidth: 1, borderColor: '#F3F4F6' },
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#1F2937',
+    marginBottom: 20,
+  },
+  userCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F9FAFB',
+    padding: 15,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
+  },
   avatar: { width: 60, height: 60, borderRadius: 30, marginRight: 15 },
   userInfo: { flex: 1 },
   userName: { fontSize: 18, fontWeight: 'bold', color: '#1F2937' },
   userEmail: { fontSize: 14, color: '#6B7280' },
-  roleBadge: { backgroundColor: '#E8F5E9', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, alignSelf: 'flex-start', marginTop: 4 },
+  roleBadge: {
+    backgroundColor: '#E8F5E9',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+    marginTop: 4,
+  },
   roleText: { fontSize: 10, color: '#2D5A27', fontWeight: 'bold' },
 
   section: { paddingHorizontal: 20, marginBottom: 25 },
-  sectionLabel: { fontSize: 14, fontWeight: '700', color: '#9CA3AF', marginBottom: 15, textTransform: 'uppercase', letterSpacing: 1 },
+  sectionLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#9CA3AF',
+    marginBottom: 15,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
 
-  menuItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#F9FAFB' },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F9FAFB',
+  },
   menuIconContainer: { marginRight: 15 },
   menuTextContainer: { flex: 1 },
   menuTitle: { fontSize: 16, fontWeight: '500', color: '#374151' },
   menuSubtitle: { fontSize: 12, color: '#9CA3AF', marginTop: 2 },
 
-  logoutButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginHorizontal: 20, marginTop: 10, padding: 15, borderRadius: 15, backgroundColor: '#FEF2F2' },
-  logoutText: { marginLeft: 10, color: '#EF4444', fontWeight: 'bold', fontSize: 16 },
-  versionText: { textAlign: 'center', color: '#9CA3AF', fontSize: 12, marginVertical: 30 },
+  logoutButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginHorizontal: 20,
+    marginTop: 10,
+    padding: 15,
+    borderRadius: 15,
+    backgroundColor: '#FEF2F2',
+  },
+  logoutText: {
+    marginLeft: 10,
+    color: '#EF4444',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  versionText: {
+    textAlign: 'center',
+    color: '#9CA3AF',
+    fontSize: 12,
+    marginVertical: 30,
+  },
 });

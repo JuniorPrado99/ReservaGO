@@ -1,8 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
 import {
-  StyleSheet, Text, View, ScrollView,
-  TouchableOpacity, TextInput, FlatList,
-  BackHandler, Keyboard
+  StyleSheet,
+  Text,
+  View,
+  ScrollView,
+  TouchableOpacity,
+  TextInput,
+  FlatList,
+  BackHandler,
+  Keyboard,
 } from 'react-native';
 import { PropertyCard } from '../../components/PropertyCard';
 import { PROPERTIES } from '../../constants/Properties';
@@ -20,14 +26,18 @@ export default function HomeScreen() {
   const [isSearching, setIsSearching] = useState(false);
   const inputRef = useRef<TextInput>(null);
 
+  // Fecha a busca ao pressionar o botão físico Voltar no Android
   useEffect(() => {
-    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (isSearching) {
-        cancelSearch();
-        return true;
-      }
-      return false;
-    });
+    const backHandler = BackHandler.addEventListener(
+      'hardwareBackPress',
+      () => {
+        if (isSearching) {
+          cancelSearch();
+          return true;
+        }
+        return false;
+      },
+    );
     return () => backHandler.remove();
   }, [isSearching]);
 
@@ -37,8 +47,10 @@ export default function HomeScreen() {
     Keyboard.dismiss();
   };
 
+  // Filtragem por título OU localização — case-insensitive e com trim
   const searchResults = PROPERTIES.filter(item => {
-    const query = searchQuery.toLowerCase();
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return false;
     return (
       item.title.toLowerCase().includes(query) ||
       item.location.toLowerCase().includes(query)
@@ -47,7 +59,9 @@ export default function HomeScreen() {
 
   const renderSection = (title: string, subCategoryName: string) => {
     const filtered = PROPERTIES.filter(
-      item => item.category === selectedCategory && item.subCategory === subCategoryName
+      item =>
+        item.category === selectedCategory &&
+        item.subCategory === subCategoryName,
     );
     if (filtered.length === 0) return null;
 
@@ -59,7 +73,7 @@ export default function HomeScreen() {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.horizontalScroll}
         >
-          {filtered.map((item) => (
+          {filtered.map(item => (
             <View key={item.id} style={{ width: 300, marginRight: 15 }}>
               <PropertyCard {...item} />
             </View>
@@ -71,9 +85,13 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
+      {/* HEADER com barra de busca e categorias */}
       <View style={styles.header}>
         <View style={styles.searchRow}>
-          <View style={[styles.searchBar, isSearching && styles.searchBarActive]}>
+          {/* Campo de busca — sempre editável */}
+          <View
+            style={[styles.searchBar, isSearching && styles.searchBarActive]}
+          >
             <Search size={18} color="#6B7280" style={{ marginRight: 10 }} />
             <TextInput
               ref={inputRef}
@@ -81,10 +99,17 @@ export default function HomeScreen() {
               placeholder="Buscar por lugar ou destino..."
               placeholderTextColor="#9CA3AF"
               value={searchQuery}
-              onChangeText={setSearchQuery}
+              onChangeText={text => {
+                setSearchQuery(text);
+                // Entra em modo busca assim que o usuário digitar qualquer coisa
+                if (text.length > 0) setIsSearching(true);
+              }}
               onFocus={() => setIsSearching(true)}
               returnKeyType="search"
+              autoCorrect={false}
+              autoCapitalize="none"
             />
+            {/* Botão limpar — aparece somente quando há texto */}
             {searchQuery.length > 0 && (
               <TouchableOpacity onPress={() => setSearchQuery('')}>
                 <X size={18} color="#6B7280" />
@@ -92,21 +117,26 @@ export default function HomeScreen() {
             )}
           </View>
 
+          {/* Botão Cancelar — aparece somente em modo busca */}
           {isSearching && (
-            <TouchableOpacity onPress={cancelSearch} style={styles.cancelButton}>
+            <TouchableOpacity
+              onPress={cancelSearch}
+              style={styles.cancelButton}
+            >
               <Text style={styles.cancelText}>Cancelar</Text>
             </TouchableOpacity>
           )}
         </View>
 
+        {/* Categorias — escondidas durante a busca */}
         {!isSearching && (
           <View style={styles.categoriesContainer}>
-            {CATEGORIES.map((cat) => (
+            {CATEGORIES.map(cat => (
               <TouchableOpacity
                 key={cat.id}
                 style={[
                   styles.categoryItem,
-                  selectedCategory === cat.name && styles.categoryActive
+                  selectedCategory === cat.name && styles.categoryActive,
                 ]}
                 onPress={() => setSelectedCategory(cat.name)}
               >
@@ -114,10 +144,12 @@ export default function HomeScreen() {
                   size={22}
                   color={selectedCategory === cat.name ? '#2D5A27' : '#6B7280'}
                 />
-                <Text style={[
-                  styles.categoryText,
-                  selectedCategory === cat.name && styles.categoryTextActive
-                ]}>
+                <Text
+                  style={[
+                    styles.categoryText,
+                    selectedCategory === cat.name && styles.categoryTextActive,
+                  ]}
+                >
                   {cat.name}
                 </Text>
               </TouchableOpacity>
@@ -126,21 +158,25 @@ export default function HomeScreen() {
         )}
       </View>
 
+      {/* CONTEÚDO: resultados de busca OU listagem por categoria */}
       {isSearching ? (
         <View style={{ flex: 1 }}>
-          {searchQuery.length === 0 ? (
+          {searchQuery.trim().length === 0 ? (
+            // Dica inicial quando o campo está focado mas vazio
             <View style={styles.searchHint}>
               <Text style={styles.searchHintText}>
                 Digite o nome de uma cabana ou cidade
               </Text>
             </View>
           ) : searchResults.length === 0 ? (
+            // Nenhum resultado encontrado
             <View style={styles.searchHint}>
               <Text style={styles.searchHintText}>
                 Nenhum resultado para "{searchQuery}"
               </Text>
             </View>
           ) : (
+            // Lista de resultados
             <FlatList
               data={searchResults}
               keyExtractor={item => item.id}
@@ -152,6 +188,7 @@ export default function HomeScreen() {
           )}
         </View>
       ) : (
+        // Listagem normal por categoria
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
@@ -230,6 +267,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 14,
     color: '#1F2937',
+    padding: 0, // remove padding padrão do Android para alinhar o cursor
   },
   cancelButton: {
     marginLeft: 12,
