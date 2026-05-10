@@ -10,6 +10,7 @@ import {
   Alert,
   Linking,
   FlatList,
+  Platform, // ✅ Adicionado para checar iOS/Android no mapa
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
@@ -25,12 +26,9 @@ import {
   Flag,
   ChevronRight,
   X,
-  Calendar,
-  CreditCard,
   Check,
   ShieldCheck,
   Clock,
-  Ban,
   AlertTriangle,
   Footprints,
 } from 'lucide-react-native';
@@ -118,7 +116,6 @@ export default function DetailsScreen() {
   const { user } = useAuth();
   const { favorites, toggleFavorite } = useFavorites();
 
-  // ✅ isolationLevel adicionado aos params
   const { id, title, price, location, description, image, isolationLevel } = useLocalSearchParams();
   const isFav = favorites.includes(id as string);
 
@@ -130,9 +127,7 @@ export default function DetailsScreen() {
   const [calendarVisible, setCalendarVisible] = useState(false);
   const [selectingDate, setSelectingDate] = useState<'checkIn' | 'checkOut'>('checkIn');
 
-  const [guests, setGuests] = useState('1');
   const [payMethod, setPayMethod] = useState<'pix' | 'card'>('pix');
-
   const [reviewsModal, setReviewsModal] = useState(false);
   const [reviewFilter, setReviewFilter] = useState<'all' | 'positive' | 'negative' | 'recent'>('all');
 
@@ -187,9 +182,31 @@ export default function DetailsScreen() {
     return `${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')}`;
   };
 
+  // ✅ 1. Correção da função de abrir o mapa nativo
   const openMap = () => {
     const query = encodeURIComponent(location as string);
-    Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${query}`);
+    const url = Platform.select({
+      ios: `maps:0,0?q=${query}`,
+      android: `geo:0,0?q=${query}`,
+      default: `https://www.google.com/maps/search/?api=1&query=${query}`,
+    });
+    Linking.openURL(url as string);
+  };
+
+  // ✅ 2. Função de redirecionamento para o Chat interno
+  const handleOpenChat = () => {
+    if (!user) {
+      Alert.alert('Ops!', 'Faça login para falar com o anfitrião.');
+      return;
+    }
+    router.push({
+      pathname: '/chat',
+      params: { 
+        hostId: 'host-123', // Em um app real, viria do banco de dados
+        hostName: 'Carlos Mendes',
+        propertyTitle: title
+      }
+    });
   };
 
   const renderCalendarDays = () => {
@@ -233,7 +250,6 @@ export default function DetailsScreen() {
     return days;
   };
 
-  // ✅ Resolve o nível de isolamento dinamicamente
   const isolationInfo = ISOLATION_MAP[isolationLevel as string] ?? DEFAULT_ISOLATION;
 
   return (
@@ -273,7 +289,6 @@ export default function DetailsScreen() {
 
           <View style={styles.divider} />
 
-          {/* ✅ NÍVEL DE ISOLAMENTO DINÂMICO */}
           <Text style={styles.sectionTitle}>🌿 Nível de isolamento</Text>
           <View style={styles.isolationCard}>
             <Text style={styles.isolationEmoji}>{isolationInfo.emoji}</Text>
@@ -297,15 +312,17 @@ export default function DetailsScreen() {
 
           <View style={styles.divider} />
 
+          {/* ✅ 3. Correção da Imagem do Mapa */}
           <Text style={styles.sectionTitle}>Localização</Text>
           <TouchableOpacity style={styles.mapPlaceholder} onPress={openMap} activeOpacity={0.8}>
             <Image
-              source={{ uri: `https://maps.googleapis.com/maps/api/staticmap?center=${encodeURIComponent(location as string)}&zoom=12&size=600x200&maptype=terrain` }}
+              // Usei uma imagem estática genérica de mapa para aparecer na UI enquanto você não tem a API Key do Google
+              source={{ uri: `https://images.unsplash.com/photo-1524661135-423995f22d0b?q=80&w=600&auto=format&fit=crop` }}
               style={styles.mapImage}
             />
             <View style={styles.mapOverlay}>
               <MapPin size={20} color="#fff" />
-              <Text style={styles.mapText}>Ver no mapa · {location}</Text>
+              <Text style={styles.mapText}>Ver rotas no mapa · {location}</Text>
             </View>
           </TouchableOpacity>
 
@@ -321,6 +338,7 @@ export default function DetailsScreen() {
 
           <View style={styles.divider} />
 
+          {/* ✅ 4. Botão de Chat atualizado */}
           <Text style={styles.sectionTitle}>Anfitrião</Text>
           <View style={styles.hostCard}>
             <Image source={{ uri: 'https://i.pravatar.cc/100?img=12' }} style={styles.hostAvatar} />
@@ -328,9 +346,9 @@ export default function DetailsScreen() {
               <Text style={styles.hostName}>Carlos Mendes</Text>
               <Text style={styles.hostSub}>Superhost ⭐ · No ReservaGO desde 2022</Text>
             </View>
-            <TouchableOpacity style={styles.contactBtn} onPress={() => Alert.alert('Chat', 'Abrindo conversa...')}>
+            <TouchableOpacity style={styles.contactBtn} onPress={handleOpenChat}>
               <MessageCircle size={18} color="#2D5A27" />
-              <Text style={styles.contactBtnText}>Contato</Text>
+              <Text style={styles.contactBtnText}>Falar</Text>
             </TouchableOpacity>
           </View>
 
@@ -354,8 +372,9 @@ export default function DetailsScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* MODAL RESERVA */}
+      {/* MODAL RESERVA E AVALIAÇÕES MANTIDOS IGUAIS... */}
       <Modal visible={modalVisible} animationType="slide" transparent>
+        {/* ... (código do modal de reserva intacto) ... */}
         <View style={styles.modalOverlay}>
           <View style={styles.modalSheet}>
             <View style={styles.modalHandle} />
@@ -447,7 +466,6 @@ export default function DetailsScreen() {
         </View>
       </Modal>
 
-      {/* MODAL AVALIAÇÕES */}
       <Modal visible={reviewsModal} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalSheet, { height: '85%' }]}>
