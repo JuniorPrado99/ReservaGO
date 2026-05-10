@@ -1,4 +1,4 @@
-import React, { useState } from 'react'; // 1. Adicionamos o useState
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../context/AuthContext';
@@ -8,7 +8,7 @@ export default function SelectRoleScreen() {
   const router = useRouter();
   const { loginWithGoogle } = useAuth();
   
-  // 2. Estados para o "Segredo" do Admin
+  // Estados para o "Segredo" do Admin
   const [adminVisible, setAdminVisible] = useState(false);
   const [clickCount, setClickCount] = useState(0);
 
@@ -16,8 +16,8 @@ export default function SelectRoleScreen() {
     const newCount = clickCount + 1;
     setClickCount(newCount);
     
-    // Se clicar 5 vezes, libera o botão secreto
-    if (newCount === 5) {
+    // PONTO 11: Se clicar 10 vezes, libera o botão secreto de Admin
+    if (newCount === 10) {
       setAdminVisible(true);
       Alert.alert("Modo Desenvolvedor", "Acesso administrativo liberado para esta sessão.");
     }
@@ -30,7 +30,7 @@ export default function SelectRoleScreen() {
 
   return (
     <View style={styles.container}>
-      {/* 3. O clique agora é no título para desbloquear */}
+      {/* O clique agora é no título para desbloquear (10 vezes) */}
       <TouchableOpacity onPress={handleAdminUnlock} activeOpacity={1}>
         <Text style={styles.title}>Como você prefere usar o app?</Text>
       </TouchableOpacity>
@@ -51,7 +51,7 @@ export default function SelectRoleScreen() {
         </View>
       </TouchableOpacity>
 
-      {/* 4. O botão de Admin só aparece se adminVisible for true */}
+      {/* O botão de Admin só aparece se adminVisible for true (após os 10 cliques) */}
       {adminVisible && (
         <TouchableOpacity 
           style={[styles.card, styles.adminCard]} 
