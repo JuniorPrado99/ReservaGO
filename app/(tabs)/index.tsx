@@ -10,6 +10,7 @@ import {
   BackHandler,
   Keyboard,
 } from 'react-native';
+import { useRouter } from 'expo-router'; // ✅ Importado o useRouter
 import { PropertyCard } from '../../components/PropertyCard';
 import { PROPERTIES } from '../../constants/Properties';
 import { Waves, TreePine, Droplets, Search, X } from 'lucide-react-native';
@@ -21,6 +22,7 @@ const CATEGORIES = [
 ];
 
 export default function HomeScreen() {
+  const router = useRouter(); // ✅ Inicializado o router
   const [selectedCategory, setSelectedCategory] = useState('Praia Privativa');
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
@@ -71,9 +73,28 @@ export default function HomeScreen() {
           contentContainerStyle={styles.horizontalScroll}
         >
           {filtered.map((item) => (
-            <View key={item.id} style={{ width: 300, marginRight: 15 }}>
+            <TouchableOpacity 
+              key={item.id} 
+              style={{ width: 300, marginRight: 15 }}
+              activeOpacity={0.9}
+              onPress={() => {
+                // ✅ Rota adicionada com todos os parâmetros
+                router.push({
+                  pathname: '/details',
+                  params: {
+                    id: item.id,
+                    title: item.title,
+                    price: item.price,
+                    location: item.location,
+                    description: item.description,
+                    image: item.image,
+                    isolationLevel: item.isolationLevel,
+                  }
+                });
+              }}
+            >
               <PropertyCard {...item} />
-            </View>
+            </TouchableOpacity>
           ))}
         </ScrollView>
       </View>
@@ -167,7 +188,28 @@ export default function HomeScreen() {
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled" // Garante que o clique funcione com o teclado aberto
               ItemSeparatorComponent={() => <View style={{ height: 20 }} />} // Espaço entre os cards
-              renderItem={({ item }) => <PropertyCard {...item} />}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  activeOpacity={0.9}
+                  onPress={() => {
+                    // ✅ Rota adicionada também nos resultados da busca
+                    router.push({
+                      pathname: '/details',
+                      params: {
+                        id: item.id,
+                        title: item.title,
+                        price: item.price,
+                        location: item.location,
+                        description: item.description,
+                        image: item.image,
+                        isolationLevel: item.isolationLevel,
+                      }
+                    });
+                  }}
+                >
+                  <PropertyCard {...item} />
+                </TouchableOpacity>
+              )}
             />
           )}
         </View>

@@ -54,6 +54,8 @@ function RootLayoutNav() {
         <Stack.Screen name="details" options={{ headerShown: false }} />
         <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
         <Stack.Screen name="admin-dashboard" options={{ headerShown: false }} />
+        {/* ✅ Nova rota de notificações */}
+        <Stack.Screen name="notifications" options={{ headerShown: false }} />
       </Stack>
     </ThemeProvider>
   );

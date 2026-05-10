@@ -38,6 +38,36 @@ import { useBookings } from '../context/BookingContext';
 import { useAuth } from '../context/AuthContext';
 import { useFavorites } from '../context/FavoritesContext';
 
+// --- MAPA DE NÍVEIS DE ISOLAMENTO ---
+const ISOLATION_MAP: Record<string, { emoji: string; title: string; sub: string }> = {
+  urbano: {
+    emoji: '🏘️',
+    title: 'Vizinhos próximos',
+    sub: 'Área residencial ou vila. Vizinhos a menos de 500m de distância.',
+  },
+  semi: {
+    emoji: '🌲',
+    title: 'Alguma privacidade',
+    sub: 'Área rural tranquila, vizinhos a mais de 1km. Boa para descanso.',
+  },
+  isolado: {
+    emoji: '🏕️',
+    title: 'Você é a única alma aqui',
+    sub: 'Vizinho mais próximo a mais de 3km, dentro de uma reserva particular.',
+  },
+  extremo: {
+    emoji: '🌄',
+    title: 'Isolamento total',
+    sub: 'Acesso restrito. Natureza selvagem ao redor. Sem sinal de celular.',
+  },
+};
+
+const DEFAULT_ISOLATION = {
+  emoji: '🏕️',
+  title: 'Informação não disponível',
+  sub: 'O anfitrião não informou o nível de isolamento desta cabana.',
+};
+
 // ─── Dados estáticos de exemplo ───────────────────────────────────────────────
 const REVIEWS = [
   {
@@ -88,14 +118,13 @@ export default function DetailsScreen() {
   const { user } = useAuth();
   const { favorites, toggleFavorite } = useFavorites();
 
-  const { id, title, price, location, description, image } = useLocalSearchParams();
+  // ✅ isolationLevel adicionado aos params
+  const { id, title, price, location, description, image, isolationLevel } = useLocalSearchParams();
   const isFav = favorites.includes(id as string);
 
-  // Estados do Modal e Reserva
   const [modalVisible, setModalVisible] = useState(false);
   const [step, setStep] = useState<'dates' | 'payment'>('dates');
-  
-  // Datas e Calendário
+
   const [checkInDate, setCheckInDate] = useState<Date | null>(null);
   const [checkOutDate, setCheckOutDate] = useState<Date | null>(null);
   const [calendarVisible, setCalendarVisible] = useState(false);
@@ -104,13 +133,11 @@ export default function DetailsScreen() {
   const [guests, setGuests] = useState('1');
   const [payMethod, setPayMethod] = useState<'pix' | 'card'>('pix');
 
-  // Modal avaliações e filtros
   const [reviewsModal, setReviewsModal] = useState(false);
   const [reviewFilter, setReviewFilter] = useState<'all' | 'positive' | 'negative' | 'recent'>('all');
 
   const priceNum = Number(price) || 0;
 
-  // ── CÁLCULO DINÂMICO DE PREÇO (RESTAURADO E CORRIGIDO) ────────────────────────
   const nightCount = useMemo(() => {
     if (checkInDate && checkOutDate) {
       const start = new Date(checkInDate.getFullYear(), checkInDate.getMonth(), checkInDate.getDate());
@@ -127,7 +154,6 @@ export default function DetailsScreen() {
   const serviceFee = subtotal * 0.1;
   const total = subtotal + serviceFee;
 
-  // Filtro de Avaliações
   const filteredReviews = useMemo(() => {
     let result = [...REVIEWS];
     if (reviewFilter === 'positive') result = result.filter(r => r.rating >= 4);
@@ -136,7 +162,6 @@ export default function DetailsScreen() {
     return result;
   }, [reviewFilter]);
 
-  // ── Funções ──────────────────────────────────────────────────────────────────
   const openReserveFlow = () => {
     if (!user) {
       Alert.alert('Perfil necessário', 'Você precisa estar logado para fazer uma reserva.', [
@@ -169,7 +194,7 @@ export default function DetailsScreen() {
 
   const renderCalendarDays = () => {
     const today = new Date();
-    today.setHours(0,0,0,0);
+    today.setHours(0, 0, 0, 0);
     const days = [];
     const currentMonth = today.getMonth();
     const currentYear = today.getFullYear();
@@ -178,12 +203,13 @@ export default function DetailsScreen() {
     for (let i = 1; i <= daysInMonth; i++) {
       const dateObj = new Date(currentYear, currentMonth, i);
       const isPast = dateObj < today;
-      let isSelected = (checkInDate?.getDate() === i && checkInDate?.getMonth() === currentMonth) || 
-                       (checkOutDate?.getDate() === i && checkOutDate?.getMonth() === currentMonth);
+      const isSelected =
+        (checkInDate?.getDate() === i && checkInDate?.getMonth() === currentMonth) ||
+        (checkOutDate?.getDate() === i && checkOutDate?.getMonth() === currentMonth);
 
       days.push(
-        <TouchableOpacity 
-          key={i} 
+        <TouchableOpacity
+          key={i}
           disabled={isPast}
           style={[styles.calDay, isSelected && styles.calDaySelected, isPast && { opacity: 0.2 }]}
           onPress={() => {
@@ -192,7 +218,7 @@ export default function DetailsScreen() {
               setSelectingDate('checkOut');
             } else {
               if (checkInDate && dateObj <= checkInDate) {
-                Alert.alert("Erro", "O Check-out deve ser depois do Check-in.");
+                Alert.alert('Erro', 'O Check-out deve ser depois do Check-in.');
                 return;
               }
               setCheckOutDate(dateObj);
@@ -206,6 +232,9 @@ export default function DetailsScreen() {
     }
     return days;
   };
+
+  // ✅ Resolve o nível de isolamento dinamicamente
+  const isolationInfo = ISOLATION_MAP[isolationLevel as string] ?? DEFAULT_ISOLATION;
 
   return (
     <View style={styles.container}>
@@ -221,7 +250,6 @@ export default function DetailsScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* CONTEÚDO RESTAURADO */}
         <View style={styles.content}>
           <Text style={styles.title}>{title}</Text>
           <View style={styles.row}>
@@ -245,13 +273,13 @@ export default function DetailsScreen() {
 
           <View style={styles.divider} />
 
-          {/* SEÇÃO DE ISOLAMENTO (RESTAURADA) */}
+          {/* ✅ NÍVEL DE ISOLAMENTO DINÂMICO */}
           <Text style={styles.sectionTitle}>🌿 Nível de isolamento</Text>
           <View style={styles.isolationCard}>
-            <Text style={styles.isolationEmoji}>🏕️</Text>
+            <Text style={styles.isolationEmoji}>{isolationInfo.emoji}</Text>
             <View style={{ flex: 1 }}>
-              <Text style={styles.isolationTitle}>Você é a única alma aqui</Text>
-              <Text style={styles.isolationSub}>O vizinho mais próximo fica a 4,5 km de distância, dentro de uma reserva particular.</Text>
+              <Text style={styles.isolationTitle}>{isolationInfo.title}</Text>
+              <Text style={styles.isolationSub}>{isolationInfo.sub}</Text>
             </View>
           </View>
 
@@ -269,7 +297,6 @@ export default function DetailsScreen() {
 
           <View style={styles.divider} />
 
-          {/* LOCALIZAÇÃO (RESTAURADA) */}
           <Text style={styles.sectionTitle}>Localização</Text>
           <TouchableOpacity style={styles.mapPlaceholder} onPress={openMap} activeOpacity={0.8}>
             <Image
@@ -284,7 +311,6 @@ export default function DetailsScreen() {
 
           <View style={styles.divider} />
 
-          {/* DIRETRIZES (RESTAURADA) */}
           <Text style={styles.sectionTitle}>Diretrizes da hospedagem</Text>
           <View style={styles.rulesList}>
             <RuleRow icon={Users} text="Máximo de 4 hóspedes" />
@@ -295,7 +321,6 @@ export default function DetailsScreen() {
 
           <View style={styles.divider} />
 
-          {/* ANFITRIÃO (RESTAURADO) */}
           <Text style={styles.sectionTitle}>Anfitrião</Text>
           <View style={styles.hostCard}>
             <Image source={{ uri: 'https://i.pravatar.cc/100?img=12' }} style={styles.hostAvatar} />
@@ -329,24 +354,32 @@ export default function DetailsScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* MODAL RESERVA COMPLETO */}
+      {/* MODAL RESERVA */}
       <Modal visible={modalVisible} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
           <View style={styles.modalSheet}>
             <View style={styles.modalHandle} />
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Confirmar sua viagem</Text>
-              <TouchableOpacity onPress={() => setModalVisible(false)}><X size={24} color="#000" /></TouchableOpacity>
+              <TouchableOpacity onPress={() => setModalVisible(false)}>
+                <X size={24} color="#000" />
+              </TouchableOpacity>
             </View>
 
             {step === 'dates' && (
               <ScrollView style={{ padding: 20 }}>
                 <View style={styles.dateRow}>
-                  <TouchableOpacity style={styles.dateField} onPress={() => {setSelectingDate('checkIn'); setCalendarVisible(true)}}>
+                  <TouchableOpacity
+                    style={styles.dateField}
+                    onPress={() => { setSelectingDate('checkIn'); setCalendarVisible(true); }}
+                  >
                     <Text style={styles.dateLabel}>CHECK-IN</Text>
                     <Text style={styles.dateInput}>{formatDate(checkInDate)}</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.dateField} onPress={() => {setSelectingDate('checkOut'); setCalendarVisible(true)}}>
+                  <TouchableOpacity
+                    style={styles.dateField}
+                    onPress={() => { setSelectingDate('checkOut'); setCalendarVisible(true); }}
+                  >
                     <Text style={styles.dateLabel}>CHECK-OUT</Text>
                     <Text style={styles.dateInput}>{formatDate(checkOutDate)}</Text>
                   </TouchableOpacity>
@@ -354,7 +387,7 @@ export default function DetailsScreen() {
 
                 {calendarVisible && (
                   <View style={styles.calendarContainer}>
-                    <Text style={{fontWeight:'bold', marginBottom:10, textAlign:'center'}}>
+                    <Text style={{ fontWeight: 'bold', marginBottom: 10, textAlign: 'center' }}>
                       Selecione {selectingDate === 'checkIn' ? 'entrada' : 'saída'}
                     </Text>
                     <View style={styles.calendarGrid}>{renderCalendarDays()}</View>
@@ -370,14 +403,14 @@ export default function DetailsScreen() {
                     <Text style={styles.priceLabel}>Taxa de serviço (10%)</Text>
                     <Text style={styles.priceValue}>R$ {serviceFee.toFixed(2)}</Text>
                   </View>
-                  <View style={[styles.priceRow, {marginTop:10, borderTopWidth:1, borderColor:'#EEE', paddingTop:10}]}>
-                    <Text style={{fontWeight:'bold', fontSize:16}}>Total</Text>
-                    <Text style={{fontWeight:'bold', fontSize:16, color:'#2D5A27'}}>R$ {total.toFixed(2)}</Text>
+                  <View style={[styles.priceRow, { marginTop: 10, borderTopWidth: 1, borderColor: '#EEE', paddingTop: 10 }]}>
+                    <Text style={{ fontWeight: 'bold', fontSize: 16 }}>Total</Text>
+                    <Text style={{ fontWeight: 'bold', fontSize: 16, color: '#2D5A27' }}>R$ {total.toFixed(2)}</Text>
                   </View>
                 </View>
 
-                <TouchableOpacity 
-                  style={[styles.advanceBtn, !datesAreValid && {backgroundColor:'#CCC'}]} 
+                <TouchableOpacity
+                  style={[styles.advanceBtn, !datesAreValid && { backgroundColor: '#CCC' }]}
                   disabled={!datesAreValid}
                   onPress={() => setStep('payment')}
                 >
@@ -388,15 +421,21 @@ export default function DetailsScreen() {
 
             {step === 'payment' && (
               <View style={{ padding: 20 }}>
-                <TouchableOpacity style={[styles.payOption, payMethod === 'pix' && styles.payOptionActive]} onPress={() => setPayMethod('pix')}>
-                   <Text style={{fontWeight:'bold'}}>Pagar com PIX (5% OFF)</Text>
-                   {payMethod === 'pix' && <Check size={20} color="#2D5A27" />}
+                <TouchableOpacity
+                  style={[styles.payOption, payMethod === 'pix' && styles.payOptionActive]}
+                  onPress={() => setPayMethod('pix')}
+                >
+                  <Text style={{ fontWeight: 'bold' }}>Pagar com PIX (5% OFF)</Text>
+                  {payMethod === 'pix' && <Check size={20} color="#2D5A27" />}
                 </TouchableOpacity>
-                <TouchableOpacity style={[styles.payOption, payMethod === 'card' && styles.payOptionActive]} onPress={() => setPayMethod('card')}>
-                   <Text style={{fontWeight:'bold'}}>Cartão de Crédito</Text>
-                   {payMethod === 'card' && <Check size={20} color="#2D5A27" />}
+                <TouchableOpacity
+                  style={[styles.payOption, payMethod === 'card' && styles.payOptionActive]}
+                  onPress={() => setPayMethod('card')}
+                >
+                  <Text style={{ fontWeight: 'bold' }}>Cartão de Crédito</Text>
+                  {payMethod === 'card' && <Check size={20} color="#2D5A27" />}
                 </TouchableOpacity>
-                <Text style={{textAlign:'center', marginTop:20, fontSize:18, fontWeight:'bold'}}>
+                <Text style={{ textAlign: 'center', marginTop: 20, fontSize: 18, fontWeight: 'bold' }}>
                   Total: R$ {payMethod === 'pix' ? (total * 0.95).toFixed(2) : total.toFixed(2)}
                 </Text>
                 <TouchableOpacity style={styles.advanceBtn} onPress={confirmBooking}>
@@ -408,24 +447,26 @@ export default function DetailsScreen() {
         </View>
       </Modal>
 
-      {/* MODAL AVALIAÇÕES COM FILTROS */}
+      {/* MODAL AVALIAÇÕES */}
       <Modal visible={reviewsModal} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalSheet, { height: '85%' }]}>
             <View style={styles.modalHandle} />
             <View style={styles.modalHeader}>
               <Text style={{ fontSize: 18, fontWeight: 'bold' }}>Avaliações</Text>
-              <TouchableOpacity onPress={() => setReviewsModal(false)}><X size={24} color="#000" /></TouchableOpacity>
+              <TouchableOpacity onPress={() => setReviewsModal(false)}>
+                <X size={24} color="#000" />
+              </TouchableOpacity>
             </View>
             <View style={styles.filterBar}>
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                 {['all', 'positive', 'negative', 'recent'].map((f) => (
-                  <TouchableOpacity 
-                    key={f} 
-                    style={[styles.filterChip, reviewFilter === f && styles.filterActive]} 
+                  <TouchableOpacity
+                    key={f}
+                    style={[styles.filterChip, reviewFilter === f && styles.filterActive]}
                     onPress={() => setReviewFilter(f as any)}
                   >
-                    <Text style={reviewFilter === f ? {color:'#fff'} : {color:'#666'}}>
+                    <Text style={reviewFilter === f ? { color: '#fff' } : { color: '#666' }}>
                       {f === 'all' ? 'Todas' : f === 'positive' ? 'Positivas' : f === 'negative' ? 'Críticas' : 'Recentes'}
                     </Text>
                   </TouchableOpacity>
@@ -438,14 +479,14 @@ export default function DetailsScreen() {
               contentContainerStyle={{ padding: 20 }}
               renderItem={({ item }) => (
                 <View style={styles.reviewItem}>
-                   <View style={{flexDirection:'row', gap:10, marginBottom:5}}>
-                      <Image source={{uri: item.avatar}} style={{width:40, height:40, borderRadius:20}} />
-                      <View>
-                        <Text style={{fontWeight:'bold'}}>{item.author}</Text>
-                        <Text style={{fontSize:12, color:'#999'}}>{item.date}</Text>
-                      </View>
-                   </View>
-                   <Text style={{color:'#444'}}>{item.comment}</Text>
+                  <View style={{ flexDirection: 'row', gap: 10, marginBottom: 5 }}>
+                    <Image source={{ uri: item.avatar }} style={{ width: 40, height: 40, borderRadius: 20 }} />
+                    <View>
+                      <Text style={{ fontWeight: 'bold' }}>{item.author}</Text>
+                      <Text style={{ fontSize: 12, color: '#999' }}>{item.date}</Text>
+                    </View>
+                  </View>
+                  <Text style={{ color: '#444' }}>{item.comment}</Text>
                 </View>
               )}
             />
@@ -456,7 +497,6 @@ export default function DetailsScreen() {
   );
 }
 
-// Helper das Regras
 function RuleRow({ icon: Icon, text }: { icon: any; text: string }) {
   return (
     <View style={styles.ruleRow}>
@@ -482,10 +522,10 @@ const styles = StyleSheet.create({
   divider: { height: 1, backgroundColor: '#F3F4F6', marginVertical: 20 },
   sectionTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 12 },
   bodyText: { color: '#4B5563', lineHeight: 22 },
-  isolationCard: { flexDirection: 'row', backgroundColor: '#F0F7F0', padding: 16, borderRadius: 14, gap: 12 },
+  isolationCard: { flexDirection: 'row', backgroundColor: '#F0F7F0', padding: 16, borderRadius: 14, gap: 12, alignItems: 'flex-start' },
   isolationEmoji: { fontSize: 28 },
   isolationTitle: { fontSize: 15, fontWeight: '700' },
-  isolationSub: { fontSize: 13, color: '#4B5563', marginTop: 4 },
+  isolationSub: { fontSize: 13, color: '#4B5563', marginTop: 4, lineHeight: 18 },
   amenitiesGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 15 },
   amenityItem: { flexDirection: 'row', alignItems: 'center', width: '45%', gap: 8 },
   amenityLabel: { fontSize: 14 },

@@ -7,7 +7,8 @@ export interface Property {
   description: string;
   image: string;
   category: "Praia Privativa" | "Campo" | "Cachoeira";
-  subCategory: string; 
+  subCategory: string;
+  isolationLevel: string; // ✅ 1. Adicionado aqui para a interface aceitar o campo
 }
 
 export const PROPERTIES: Property[] = [
@@ -21,7 +22,8 @@ export const PROPERTIES: Property[] = [
     description: "Um refúgio tranquilo à beira do lago.",
     image: "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b",
     category: "Campo",
-    subCategory: "Populares"
+    subCategory: "Populares", // ✅ 2. Adicionada vírgula aqui
+    isolationLevel: "semi",
   },
   {
     id: '2',
@@ -32,7 +34,8 @@ export const PROPERTIES: Property[] = [
     description: "Vista privilegiada da serra.",
     image: "https://images.unsplash.com/photo-1500382017468-9049fed747ef",
     category: "Campo",
-    subCategory: "Montanhas"
+    subCategory: "Montanhas", // ✅ Adicionada vírgula
+    isolationLevel: "Alto",
   },
   {
     id: '3',
@@ -43,7 +46,8 @@ export const PROPERTIES: Property[] = [
     description: "Cabana estilo A-frame.",
     image: "https://images.unsplash.com/photo-1510798831971-661eb04b3739",
     category: "Campo",
-    subCategory: "Montanhas"
+    subCategory: "Montanhas", // ✅ Adicionada vírgula
+    isolationLevel: "Médio",
   },
 
   // --- CACHOEIRA ---
@@ -56,7 +60,8 @@ export const PROPERTIES: Property[] = [
     description: "Luxo com som de queda d'água.",
     image: "https://images.unsplash.com/photo-1470770841072-f978cf4d019e",
     category: "Cachoeira",
-    subCategory: "Populares"
+    subCategory: "Populares", // ✅ Adicionada vírgula
+    isolationLevel: "Alto",
   },
   {
     id: '5',
@@ -67,7 +72,8 @@ export const PROPERTIES: Property[] = [
     description: "Trilha privativa para cachoeira.",
     image: "https://images.unsplash.com/photo-1542718610-a1d656d1884c",
     category: "Cachoeira",
-    subCategory: "Centro-Oeste"
+    subCategory: "Centro-Oeste", // ✅ Adicionada vírgula
+    isolationLevel: "Médio",    
   },
 
   // --- PRAIA PRIVATIVA ---
@@ -80,7 +86,8 @@ export const PROPERTIES: Property[] = [
     description: "Totalmente privativa com acesso ao mar.",
     image: "https://images.unsplash.com/photo-1499793983690-e29da59ef1c2",
     category: "Praia Privativa",
-    subCategory: "Populares"
+    subCategory: "Populares", // ✅ Adicionada vírgula
+    isolationLevel: "Alto",
   },
   {
     id: '7',
@@ -91,7 +98,8 @@ export const PROPERTIES: Property[] = [
     description: "Pé na areia com serviço exclusivo.",
     image: "https://images.unsplash.com/photo-1439066615861-d1af74d74000",
     category: "Praia Privativa",
-    subCategory: "Nordeste"
+    subCategory: "Nordeste", // ✅ Adicionada vírgula
+    isolationLevel: "Médio",
   },
   {
     id: '8',
@@ -102,6 +110,7 @@ export const PROPERTIES: Property[] = [
     description: "Design moderno com piscinas naturais.",
     image: "https://images.unsplash.com/photo-1520250497591-112f2f40a3f4",
     category: "Praia Privativa",
-    subCategory: "Nordeste"
+    subCategory: "Nordeste", // ✅ Adicionada vírgula
+    isolationLevel: "Médio",
   }
 ];
