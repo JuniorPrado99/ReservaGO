@@ -40,3 +40,8 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# arquivos sensíveis
+ID-cliente.txt
+supabase-google.txt
+link-API.txt
