@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  TextInput, KeyboardAvoidingView, Platform, Image
+  TextInput, KeyboardAvoidingView, Platform, Image, Alert
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ChevronLeft, Camera, MapPin, DollarSign, AlignLeft, Home } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
+import { useListings } from '../context/ListingContext';
 
 // --- NÍVEIS DE ISOLAMENTO ---
 const ISOLATION_LEVELS = [
@@ -37,6 +38,7 @@ const ISOLATION_LEVELS = [
 
 export default function CreateListingScreen() {
   const router = useRouter();
+  const { addListing } = useListings();
   const [title, setTitle] = useState('');
   const [location, setLocation] = useState('');
   const [price, setPrice] = useState('');
@@ -59,7 +61,22 @@ export default function CreateListingScreen() {
   };
 
   const handleSave = () => {
-    router.back();
+    if (!title.trim()) {
+      Alert.alert('Campo obrigatório', 'Informe o título do anúncio.');
+      return;
+    }
+    addListing({
+      title: title.trim(),
+      location: location.trim(),
+      price: price.trim(),
+      description: description.trim(),
+      imageUri,
+      isolationLevel,
+    });
+    Alert.alert('Anúncio publicado! 🌿', 'Sua cabana já está visível no painel.', [
+      { text: 'Ver minhas cabanas', onPress: () => router.replace('/my-cabins') },
+      { text: 'OK', onPress: () => router.back() },
+    ]);
   };
 
   return (

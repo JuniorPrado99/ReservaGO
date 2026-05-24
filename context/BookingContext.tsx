@@ -6,11 +6,22 @@ interface Booking {
   propertyId: string;
   date: string;
   status: 'reservada' | 'realizada';
+  checkIn?: string;
+  checkOut?: string;
+  nights?: number;
+  payMethod?: 'pix' | 'card';
+  total?: number;
 }
 
 interface BookingContextData {
   bookings: Booking[];
-  addBooking: (propertyId: string) => void;
+  addBooking: (propertyId: string, options?: {
+    checkIn?: Date | null;
+    checkOut?: Date | null;
+    nights?: number;
+    payMethod?: 'pix' | 'card';
+    total?: number;
+  }) => void;
   cancelBooking: (propertyId: string) => void;
 }
 
@@ -54,7 +65,16 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const addBooking = (propertyId: string) => {
+  const addBooking = (propertyId: string, options?: {
+    checkIn?: Date | null;
+    checkOut?: Date | null;
+    nights?: number;
+    payMethod?: 'pix' | 'card';
+    total?: number;
+  }) => {
+    const formatDateBR = (date: Date) =>
+      `${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getFullYear()}`;
+
     const newBooking: Booking = {
       propertyId,
       date: new Date().toLocaleDateString('pt-BR', {
@@ -63,6 +83,11 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
         year: 'numeric',
       }),
       status: 'reservada',
+      checkIn: options?.checkIn ? formatDateBR(options.checkIn) : undefined,
+      checkOut: options?.checkOut ? formatDateBR(options.checkOut) : undefined,
+      nights: options?.nights,
+      payMethod: options?.payMethod,
+      total: options?.total,
     };
     const updated = [newBooking, ...bookings];
     setBookings(updated);
