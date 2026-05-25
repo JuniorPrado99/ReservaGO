@@ -16,85 +16,10 @@ import {
   Bell,
   CheckCheck,
 } from 'lucide-react-native';
+import { useNotifications, AppNotification } from '../context/NotificationContext';
 
 type NotificationType = 'reserva' | 'mensagem' | 'promocao' | 'aviso';
 type FilterType = 'todas' | NotificationType;
-
-interface Notification {
-  id: string;
-  type: NotificationType;
-  title: string;
-  body: string;
-  time: string;
-  read: boolean;
-}
-
-const INITIAL_NOTIFICATIONS: Notification[] = [
-  {
-    id: '1',
-    type: 'reserva',
-    title: 'Reserva confirmada! 🎉',
-    body: 'Sua reserva no Refúgio das Pedras foi confirmada para 15–18 de Jun.',
-    time: 'Agora',
-    read: false,
-  },
-  {
-    id: '2',
-    type: 'mensagem',
-    title: 'Carlos Mendes respondeu',
-    body: 'Olá! O check-in pode ser feito a partir das 14h. Qualquer dúvida é só chamar.',
-    time: '5 min atrás',
-    read: false,
-  },
-  {
-    id: '3',
-    type: 'promocao',
-    title: '🏷️ Oferta especial para você',
-    body: 'Use o cupom RESERVAGO15 e ganhe 15% de desconto na sua próxima reserva.',
-    time: '1 hora atrás',
-    read: false,
-  },
-  {
-    id: '4',
-    type: 'aviso',
-    title: 'Lembrete de viagem',
-    body: 'Sua estadia na Cabana Suíça começa em 3 dias. Confira as diretrizes da hospedagem.',
-    time: 'Ontem',
-    read: true,
-  },
-  {
-    id: '5',
-    type: 'reserva',
-    title: 'Reserva pendente',
-    body: 'Sua solicitação para a Cabana do Rio está aguardando confirmação do anfitrião.',
-    time: 'Ontem',
-    read: true,
-  },
-  {
-    id: '6',
-    type: 'mensagem',
-    title: 'Nova mensagem de Ana Lima',
-    body: 'Tudo certo para a chegada de vocês! Deixei as instruções na porta.',
-    time: '2 dias atrás',
-    read: true,
-  },
-  {
-    id: '7',
-    type: 'promocao',
-    title: '🌿 Novidade no ReservaGO',
-    body: 'Agora você pode filtrar cabanas por nível de isolamento. Experimente!',
-    time: '3 dias atrás',
-    read: true,
-  },
-  {
-    id: '8',
-    type: 'reserva',
-    title: 'Reserva cancelada',
-    body: 'A reserva no Chalé das Montanhas foi cancelada. O reembolso será processado em até 5 dias úteis.',
-    time: '1 semana atrás',
-    read: true,
-  },
-];
 
 const TYPE_CONFIG: Record<NotificationType, { icon: any; color: string; bg: string; label: string }> = {
   reserva: { icon: Calendar, color: '#2D5A27', bg: '#F0F7F0', label: 'Reservas' },
@@ -113,27 +38,15 @@ const FILTERS: { key: FilterType; label: string }[] = [
 
 export default function NotificationsScreen() {
   const router = useRouter();
-  const [notifications, setNotifications] = useState<Notification[]>(INITIAL_NOTIFICATIONS);
+  const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
   const [activeFilter, setActiveFilter] = useState<FilterType>('todas');
-
-  const unreadCount = notifications.filter(n => !n.read).length;
 
   const filtered = useMemo(() => {
     if (activeFilter === 'todas') return notifications;
     return notifications.filter(n => n.type === activeFilter);
   }, [notifications, activeFilter]);
 
-  const markAllAsRead = () => {
-    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-  };
-
-  const markAsRead = (id: string) => {
-    setNotifications(prev =>
-      prev.map(n => n.id === id ? { ...n, read: true } : n)
-    );
-  };
-
-  const renderItem = ({ item }: { item: Notification }) => {
+  const renderItem = ({ item }: { item: AppNotification }) => {
     const config = TYPE_CONFIG[item.type];
     const IconComponent = config.icon;
 

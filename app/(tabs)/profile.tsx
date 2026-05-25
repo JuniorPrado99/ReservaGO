@@ -39,6 +39,7 @@ import {
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../context/AuthContext';
+import { useNotifications } from '../../context/NotificationContext';
 
 const PAST_TRIPS = [
   { id: '1', title: 'Refúgio das Pedras', date: 'Dez 2024', image: 'https://images.unsplash.com/photo-1510798831971-661eb04b3739?w=300&q=80' },
@@ -96,12 +97,12 @@ const TERMS_SECTIONS = [
   },
 ];
 
-// Contagem mock de não lidas — futuramente virá do contexto de notificações
-const UNREAD_NOTIFICATIONS = 3;
+// Contagem de não lidas vinda do contexto de notificações (dinâmica)
 
 export default function ProfileScreen() {
   const router = useRouter();
   const { user, logout } = useAuth();
+  const { unreadCount: UNREAD_NOTIFICATIONS } = useNotifications();
 
   const [isEditModalVisible, setEditModalVisible] = useState(false);
   const [isPrivacyVisible, setPrivacyVisible] = useState(false);

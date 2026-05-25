@@ -9,6 +9,8 @@ import 'react-native-reanimated';
 import { AuthProvider } from '../context/AuthContext';
 import { BookingProvider } from '../context/BookingContext';
 import { FavoritesProvider } from '../context/FavoritesContext';
+import { NotificationProvider } from '../context/NotificationContext';
+import { ListingProvider } from '../context/ListingContext';
 import { useColorScheme } from '../components/useColorScheme';
 
 export { ErrorBoundary } from 'expo-router';
@@ -34,7 +36,11 @@ export default function RootLayout() {
     <AuthProvider>
       <BookingProvider>
         <FavoritesProvider>
-          <RootLayoutNav />
+          <NotificationProvider>
+            <ListingProvider>
+              <RootLayoutNav />
+            </ListingProvider>
+          </NotificationProvider>
         </FavoritesProvider>
       </BookingProvider>
     </AuthProvider>
