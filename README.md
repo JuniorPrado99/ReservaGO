@@ -1,39 +1,37 @@
-# ReservaGO
+# ReservaGO 🏕️
 
-Aplicativo mobile de reserva de hotéis desenvolvido como Projeto Final de Curso (TCC) — 7º Período.
+Aplicativo mobile de reserva de cabanas e hospedagens desenvolvido como Projeto Final de Curso (TCC) — 7º Período.
 
 ---
 
 ## Sobre o projeto
 
-O ReservaGO permite que usuários busquem, visualizem e reservem hospedagens diretamente pelo celular. O app integra APIs externas de hotéis, pagamento e localização em uma interface mobile moderna.
+O ReservaGO permite que usuários busquem, visualizem e reservem cabanas diretamente pelo celular. O app conta com autenticação real via Google, banco de dados em nuvem e uma interface mobile moderna inspirada no Airbnb.
+
+O sistema suporta dois tipos de usuário:
+- **Hóspede** — busca, filtra, favorita e reserva cabanas
+- **Anfitrião** — cadastra e gerencia seus próprios anúncios
 
 ---
 
 ## Tecnologias utilizadas
 
-**Frontend (Mobile)**
+### Frontend (Mobile)
 - React Native + Expo SDK 54
 - TypeScript
 - Expo Router (navegação baseada em arquivos)
 - Lucide React Native (ícones)
+- Expo Web Browser / Expo Linking (OAuth)
 
-**Backend**
-- Node.js
-- API REST / JSON
-- PostgreSQL (AWS RDS)
-- Redis (AWS ElastiCache)
+### Backend / Banco de Dados
+- Supabase (PostgreSQL gerenciado)
+- Supabase Auth (autenticação com Google OAuth)
+- Supabase Storage (imagens)
+- Row Level Security (RLS) para proteção de dados
 
-**Infraestrutura**
-- AWS EC2 / Render (backend)
-- Vercel (frontend web)
-- Amazon S3 (imagens e documentos)
-- Cloudflare CDN + AWS ALB
-
-**Serviços externos**
-- Booking / Expedia / Hoteis.com (APIs de hotéis)
-- Stripe / Pix (pagamentos)
-- Google Maps (localização)
+### Infraestrutura de desenvolvimento
+- ngrok (tunnel para OAuth em desenvolvimento local)
+- GitHub Actions (CI/CD)
 
 ---
 
@@ -43,13 +41,14 @@ Antes de rodar o projeto, instale:
 
 - [Node.js](https://nodejs.org/) (versão 18 ou superior)
 - [Git](https://git-scm.com/)
-- [Expo Go](https://expo.dev/client) no celular (Android ou iOS)
+- [Expo Go](https://expo.dev/go) no celular (Android ou iOS)
+- [ngrok](https://ngrok.com/download) instalado globalmente (necessário para login com Google)
 
 ---
 
 ## Como rodar localmente
 
-````bash
+```bash
 # 1. Clonar o repositório
 git clone https://github.com/JuniorPrado99/ReservaGO.git
 cd ReservaGO
@@ -57,73 +56,127 @@ cd ReservaGO
 # 2. Instalar dependências
 npm install
 
-# 3. Iniciar o projeto
-npx expo start
-````
+# 3. Criar o arquivo de variáveis de ambiente
+cp .env.example .env
+# Preencha o .env com as chaves do Supabase (peça ao time)
+
+# 4. Iniciar o Expo (Terminal 1)
+npx expo start --clear
+
+# 5. Iniciar o ngrok (Terminal 2) — necessário para login com Google
+ngrok http 127.0.0.1:8081
+```
 
 Após iniciar, escaneie o QR Code com o Expo Go (Android) ou com a câmera (iOS).
 
-Para rodar sem internet:
-
-````bash
-npx expo start --offline
-````
+> ⚠️ Os dois terminais (Expo + ngrok) precisam estar rodando ao mesmo tempo para o login com Google funcionar.
 
 ---
-## Dependências adicionais
 
-Algumas dependências nativas precisam ser instaladas separadamente com o Expo CLI para garantir compatibilidade com a versão correta do SDK:
+## Variáveis de ambiente
 
-| Pacote | Motivo |
-|---|---|
-| `@react-native-async-storage/async-storage` | Persistência local de favoritos e reservas por usuário entre sessões do app |
+Crie um arquivo `.env` na raiz do projeto com o seguinte conteúdo (solicite os valores ao time):
 
-Para instalar:
-
-```bash
-npx expo install @react-native-async-storage/async-storage
+```
+EXPO_PUBLIC_SUPABASE_URL=sua_url_aqui
+EXPO_PUBLIC_SUPABASE_ANON_KEY=sua_chave_aqui
 ```
 
-> Sempre use `npx expo install` (não `npm install`) para pacotes nativos — o Expo garante a versão compatível com o SDK atual.
+> O arquivo `.env` está no `.gitignore` e nunca deve ser commitado.
+
+---
+
+## Dependências principais
+
+| Pacote | Motivo |
+|--------|--------|
+| `@react-native-async-storage/async-storage` | Persistência local de sessão entre aberturas do app |
+| `expo-web-browser` | Abertura do browser nativo para OAuth |
+| `expo-linking` | Deep links para retorno após autenticação |
+| `expo-constants` | Detecção de ambiente (Expo Go vs build) |
+| `react-native-url-polyfill` | Compatibilidade de URL no React Native |
+
+Para instalar dependências nativas sempre use:
+```bash
+npx expo install <pacote>
+```
 
 ---
 
 ## Estrutura do projeto
 
-````
+```
 ReservaGO/
-├── app/              # Telas e rotas (Expo Router)
-├── components/       # Componentes reutilizáveis (botões, cards, formulários)
-├── context/          # Estado global (autenticação, reservas, favoritos)
-├── constants/        # Cores, fontes, textos fixos
-├── assets/           # Imagens e ícones
-├── app.json          # Configuração do Expo
-├── package.json      # Dependências
-└── tsconfig.json     # Configuração TypeScript
-````
+├── app/                    # Telas e rotas (Expo Router)
+│   ├── (tabs)/             # Abas principais (Explorar, Favoritos, Viagens, Perfil)
+│   ├── --/                 # Rota de callback OAuth
+│   ├── _layout.tsx         # Layout raiz com providers
+│   ├── login.tsx           # Tela de autenticação
+│   ├── details.tsx         # Detalhes da cabana + reserva
+│   ├── create-listing.tsx  # Cadastro de anúncio (anfitrião)
+│   └── my-cabins.tsx       # Painel do anfitrião
+├── context/                # Estado global
+│   ├── AuthContext.tsx     # Autenticação com Supabase + Google OAuth
+│   ├── BookingContext.tsx  # Reservas do usuário
+│   ├── ListingContext.tsx  # Anúncios do anfitrião
+│   └── NotificationContext.tsx
+├── lib/
+│   └── supabase.ts         # Cliente Supabase configurado
+├── components/             # Componentes reutilizáveis
+├── constants/              # Cores, fontes, textos fixos
+├── assets/                 # Imagens e ícones
+├── .env.example            # Modelo de variáveis de ambiente
+├── app.json                # Configuração do Expo (scheme: reservago)
+├── package.json            # Dependências
+└── tsconfig.json           # Configuração TypeScript
+```
 
 ---
 
-## Arquitetura
+## Autenticação
 
-O sistema é dividido em camadas:
+O login é feito via **Google OAuth** integrado ao Supabase. O fluxo:
 
-| Camada | Tecnologia |
-|---|---|
-| Cliente (Mobile) | React Native + Expo |
-| Rede / Edge | Cloudflare CDN + AWS ALB |
-| Aplicação | Node.js (API REST) |
-| Dados | PostgreSQL + Redis + S3 |
-| Segurança | HTTPS/TLS + JWT + AWS Shield |
+1. App abre o browser nativo via `WebBrowser.openAuthSessionAsync`
+2. Usuário autentica no Google
+3. Google redireciona para o Supabase (`/auth/v1/callback`)
+4. Supabase redireciona para o app via deep link (`reservago://oauth-callback`)
+5. App captura o token e cria a sessão
+6. Trigger `handle_new_user` cria automaticamente o perfil na tabela `profiles`
 
-Pipeline de CI/CD via GitHub Actions: push na `main` → build → testes → deploy automático.
+---
+
+## Banco de dados
+
+O projeto usa **Supabase** com as seguintes tabelas principais:
+
+| Tabela | Descrição |
+|--------|-----------|
+| `profiles` | Dados do usuário (nome, email, role, avatar) |
+| `listings` | Cabanas cadastradas pelos anfitriões |
+| `bookings` | Reservas feitas pelos hóspedes |
+| `notifications` | Notificações do sistema |
+
+---
+
+## Testes
+
+```bash
+# Rodar o teste de snapshot
+npm test
+
+# Atualizar snapshots após mudanças intencionais
+npm test -- -u
+```
+
+O projeto conta com um **Smoke Test** (teste de fumaça) via Jest que valida a estrutura visual do componente `StyledText` usando snapshot testing.
 
 ---
 
 ## Equipe
 
 | Nome | GitHub |
-|---|---|
+|------|--------|
 | Junior Prado | [@JuniorPrado99](https://github.com/JuniorPrado99) |
 | Arthur Caixeta | [@ArthurCaixet0](https://github.com/ArthurCaixet0) |
 | Ian Couto | [@IanCoutoFTT](https://github.com/IanCoutoFTT) |
@@ -132,4 +185,4 @@ Pipeline de CI/CD via GitHub Actions: push na `main` → build → testes → de
 
 ## Licença
 
-MIT License — veja o arquivo [LICENSE](./LICENSE) para detalhes.
+MIT License — veja o arquivo [LICENSE](LICENSE) para detalhes.
