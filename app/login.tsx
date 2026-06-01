@@ -1,64 +1,98 @@
-import React, { useState } from 'react';
-import {
-  View, Text, StyleSheet, TouchableOpacity,
-  SafeAreaView, ActivityIndicator, Alert,
-} from 'react-native';
-import { useRouter } from 'expo-router';
 import { FontAwesome } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import React, { useEffect, useState } from 'react';
+import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  SafeAreaView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { useAuth } from '../context/AuthContext';
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { loginWithGoogle } = useAuth();
+  const { login, user } = useAuth();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleGoogleLogin = async () => {
-    try {
-      setIsLoading(true);
-      await loginWithGoogle();
-      // Não precisa navegar aqui — o onAuthStateChange no AuthContext
-      // detecta a sessão e o _layout.tsx redireciona automaticamente
-    } catch (error: any) {
-      Alert.alert('Erro de Autenticação', error?.message || 'Não foi possível conectar ao Google.');
-    } finally {
-      setIsLoading(false);
+  useEffect(() => {
+    if (user) {
+      router.replace('/(tabs)');
     }
+  }, [user]);
+
+  const handleLogin = async () => {
+    if (!email.trim() || !password.trim()) return;
+    setIsLoading(true);
+    await login(email, password);
+    setIsLoading(false);
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.content}>
-        <View style={styles.header}>
-          <FontAwesome name="tree" size={60} color="#2D5A27" />
-          <Text style={styles.title}>Bem-vindo ao ReservaGO</Text>
-          <Text style={styles.subtitle}>Sua conta para as melhores cabanas do Brasil.</Text>
-        </View>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <View style={styles.content}>
 
-        <View style={styles.buttonContainer}>
-          <TouchableOpacity
-            style={[styles.googleButton, isLoading && { opacity: 0.7 }]}
-            onPress={handleGoogleLogin}
-            disabled={isLoading}
-          >
-            {isLoading ? (
-              <ActivityIndicator color="#2D5A27" />
-            ) : (
-              <>
-                <FontAwesome name="google" size={20} color="#EA4335" />
-                <Text style={styles.googleText}>Continuar com Google</Text>
-              </>
-            )}
-          </TouchableOpacity>
+          <View style={styles.header}>
+            <FontAwesome name="tree" size={60} color="#2D5A27" />
+            <Text style={styles.title}>Bem-vindo ao ReservaGO</Text>
+            <Text style={styles.subtitle}>Sua conta para as melhores cabanas do Brasil.</Text>
+          </View>
 
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => router.back()}
-            disabled={isLoading}
-          >
-            <Text style={styles.backText}>Voltar e explorar</Text>
-          </TouchableOpacity>
+          <View style={styles.form}>
+            <TextInput
+              style={styles.input}
+              placeholder="E-mail"
+              placeholderTextColor="#9CA3AF"
+              value={email}
+              onChangeText={setEmail}
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="email-address"
+              editable={!isLoading}
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Senha"
+              placeholderTextColor="#9CA3AF"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+              editable={!isLoading}
+            />
+
+            <TouchableOpacity
+              style={[styles.loginButton, (!email || !password || isLoading) && styles.loginButtonDisabled]}
+              onPress={handleLogin}
+              disabled={!email || !password || isLoading}
+            >
+              {isLoading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.loginText}>Entrar</Text>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.backButton}
+              onPress={() => router.back()}
+              disabled={isLoading}
+            >
+              <Text style={styles.backText}>Voltar e explorar</Text>
+            </TouchableOpacity>
+          </View>
+
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -69,13 +103,17 @@ const styles = StyleSheet.create({
   header: { alignItems: 'center' },
   title: { fontSize: 28, fontWeight: 'bold', color: '#1F2937', marginTop: 20, textAlign: 'center' },
   subtitle: { fontSize: 16, color: '#6B7280', textAlign: 'center', marginTop: 10 },
-  buttonContainer: { gap: 15 },
-  googleButton: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    padding: 18, borderRadius: 15, borderWidth: 1, borderColor: '#E5E7EB',
-    backgroundColor: '#fff', minHeight: 58,
+  form: { gap: 15 },
+  input: {
+    borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 15,
+    padding: 18, fontSize: 16, color: '#1F2937', backgroundColor: '#F9FAFB',
   },
-  googleText: { marginLeft: 12, fontSize: 16, fontWeight: '600', color: '#1F2937' },
+  loginButton: {
+    backgroundColor: '#2D5A27', padding: 18, borderRadius: 15,
+    alignItems: 'center', minHeight: 58, justifyContent: 'center',
+  },
+  loginButtonDisabled: { opacity: 0.5 },
+  loginText: { fontSize: 16, fontWeight: 'bold', color: '#fff' },
   backButton: { alignItems: 'center', padding: 10 },
   backText: { color: '#6B7280', textDecorationLine: 'underline' },
 });
