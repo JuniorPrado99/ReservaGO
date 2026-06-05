@@ -1,39 +1,32 @@
-import { useState, useMemo } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Image,
-  Modal,
-  Alert,
-  Linking,
-  FlatList,
-} from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
-  ChevronLeft,
-  Heart,
-  Star,
-  MapPin,
-  Wifi,
-  Flame,
-  Trees,
-  Users,
-  MessageCircle,
-  Flag,
-  ChevronRight,
-  X,
-  CreditCard,
   Check,
-  ShieldCheck,
-  Clock,
-  AlertTriangle,
+  ChevronLeft,
+  ChevronRight,
+  Flame,
   Footprints,
+  Heart,
+  MapPin,
+  Star,
+  Trees,
+  Wifi,
+  X,
 } from 'lucide-react-native';
-import { useBookings } from '../context/BookingContext';
+import { useMemo, useState } from 'react';
+import {
+  Alert,
+  Image,
+  Linking,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { useAuth } from '../context/AuthContext';
+import { useBookings } from '../context/BookingContext';
 import { useFavorites } from '../context/FavoritesContext';
 
 const ISOLATION_MAP: Record<string, { emoji: string; title: string; sub: string }> = {
@@ -54,8 +47,8 @@ const ISOLATION_MAP: Record<string, { emoji: string; title: string; sub: string 
   },
   extremo: {
     emoji: '🌄',
-    title: 'Isolamento total',
-    sub: 'Acesso restrito. Natureza selvagem ao redor. Sem sinal de celular.',
+    title: 'Você é a única alma aqui',
+    sub: 'O vizinho mais próximo fica a 4.5 km de distância, dentro de uma reserva particular de 20 hectares.',
   },
 };
 
@@ -82,8 +75,7 @@ export default function DetailsScreen() {
   const { addBooking } = useBookings();
   const { user } = useAuth();
   const { favorites, toggleFavorite } = useFavorites();
-  
-  // ✅ hostId adicionado via desestruturação dos params locais
+
   const { id, title, price, location, description, image, isolationLevel, hostId } = useLocalSearchParams();
   const isFav = favorites.includes(id as string);
 
@@ -94,11 +86,9 @@ export default function DetailsScreen() {
   const [calendarVisible, setCalendarVisible] = useState(false);
   const [selectingDate, setSelectingDate] = useState<'checkIn' | 'checkOut'>('checkIn');
   const [payMethod, setPayMethod] = useState<'pix' | 'card'>('pix');
-  const [reviewsModal, setReviewsModal] = useState(false);
-  const [reviewFilter, setReviewFilter] = useState<'all' | 'positive' | 'negative' | 'recent'>('all');
 
   const priceNum = Number(price) || 0;
-  
+
   const nightCount = useMemo(() => {
     if (checkInDate && checkOutDate) {
       const start = new Date(checkInDate.getFullYear(), checkInDate.getMonth(), checkInDate.getDate());
@@ -115,12 +105,6 @@ export default function DetailsScreen() {
   const serviceFee = subtotal * 0.1;
   const total = subtotal + serviceFee;
 
-  const filteredReviews = useMemo(() => {
-    let result = [...REVIEWS];
-    if (reviewFilter === 'positive') result = result.filter(r => r.rating >= 4);
-    return result;
-  }, [reviewFilter]);
-
   const openReserveFlow = () => {
     if (!user) {
       Alert.alert('Perfil necessário', 'Você precisa estar logado para fazer uma reserva.', [
@@ -134,14 +118,13 @@ export default function DetailsScreen() {
   };
 
   const confirmBooking = () => {
-    // ✅ Agora enviando de forma correta e limpa o hostId exigido pelo banco do Supabase
     addBooking(id as string, {
       checkIn: checkInDate,
       checkOut: checkOutDate,
       nights: nightCount,
       payMethod,
       total: payMethod === 'pix' ? total * 0.95 : total,
-      hostId: hostId as string, 
+      hostId: Array.isArray(hostId) ? hostId[0] : hostId ?? '',
     });
     setModalVisible(false);
     Alert.alert('Reserva Confirmada! 🌿', 'Sua viagem foi registrada com sucesso.', [
@@ -156,7 +139,12 @@ export default function DetailsScreen() {
 
   const openMap = () => {
     const query = encodeURIComponent(location as string);
-    Linking.openURL(`http://maps.google.com/?q=${query}`);
+    const url = Platform.OS === 'ios'
+      ? `maps://?q=${query}`
+      : `geo:0,0?q=${query}`;
+    Linking.openURL(url).catch(() => {
+      Linking.openURL(`https://maps.google.com/?q=${query}`);
+    });
   };
 
   const renderCalendarDays = () => {
@@ -178,7 +166,10 @@ export default function DetailsScreen() {
       const isCheckIn = checkInDate?.getDate() === i && checkInDate?.getMonth() === currentMonth;
       const isCheckOut = checkOutDate?.getDate() === i && checkOutDate?.getMonth() === currentMonth;
       const isSelected = isCheckIn || isCheckOut;
-      const isInRange = checkInDate && checkOutDate && dateObj > checkInDate && dateObj < checkOutDate && dateObj.getMonth() === currentMonth;
+      const isInRange =
+        checkInDate && checkOutDate &&
+        dateObj > checkInDate && dateObj < checkOutDate &&
+        dateObj.getMonth() === currentMonth;
 
       days.push(
         <TouchableOpacity
@@ -205,7 +196,13 @@ export default function DetailsScreen() {
             }
           }}
         >
-          <Text style={[styles.calDayText, isSelected && styles.calDayTextSelected, isInRange && styles.calDayTextInRange]}>{i}</Text>
+          <Text style={[
+            styles.calDayText,
+            isSelected && styles.calDayTextSelected,
+            isInRange && styles.calDayTextInRange,
+          ]}>
+            {i}
+          </Text>
         </TouchableOpacity>
       );
     }
@@ -233,7 +230,7 @@ export default function DetailsScreen() {
             <MapPin size={14} color="#6B7280" />
             <Text style={styles.locationText}> {location}</Text>
           </View>
-          <TouchableOpacity style={styles.ratingRow} onPress={() => setReviewsModal(true)}>
+          <TouchableOpacity style={styles.ratingRow}>
             <Star size={16} color="#F59E0B" fill="#F59E0B" />
             <Text style={styles.ratingValue}> 4,98</Text>
             <Text style={styles.ratingCount}> · {REVIEWS.length} avaliações</Text>
@@ -243,7 +240,7 @@ export default function DetailsScreen() {
           <View style={styles.divider} />
           <Text style={styles.sectionTitle}>Sobre o lugar</Text>
           <Text style={styles.bodyText}>{description || 'Um refúgio único rodeado pela natureza.'}</Text>
-          
+
           <View style={styles.divider} />
           <Text style={styles.sectionTitle}>🌿 Nível de isolamento</Text>
           <View style={styles.isolationCard}>
@@ -268,14 +265,59 @@ export default function DetailsScreen() {
           <View style={styles.divider} />
           <Text style={styles.sectionTitle}>Localização</Text>
           <TouchableOpacity style={styles.mapPlaceholder} onPress={openMap} activeOpacity={0.8}>
-            <Image
-              source={{ uri: `https://maps.googleapis.com/maps/api/staticmap?center=${encodeURIComponent(location as string)}&zoom=12&size=600x200&maptype=terrain&key=STATIC_MAP_MOCK` }}
-              style={styles.mapImage}
-            />
             <View style={styles.mapOverlay}>
               <MapPin size={20} color="#fff" />
               <Text style={styles.mapText}>Ver no mapa · {location}</Text>
             </View>
+          </TouchableOpacity>
+
+          <View style={styles.divider} />
+          <Text style={styles.sectionTitle}>Avaliações</Text>
+          {REVIEWS.map((r) => (
+            <View key={r.id} style={styles.reviewCard}>
+              <Image source={{ uri: r.avatar }} style={styles.reviewAvatar} />
+              <View style={{ flex: 1 }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                  <Text style={styles.reviewAuthor}>{r.author}</Text>
+                  <Text style={styles.reviewDate}>{r.date}</Text>
+                </View>
+                <View style={{ flexDirection: 'row', marginVertical: 4 }}>
+                  {[...Array(r.rating)].map((_, i) => (
+                    <Star key={i} size={12} color="#F59E0B" fill="#F59E0B" />
+                  ))}
+                </View>
+                <Text style={styles.reviewComment}>{r.comment}</Text>
+              </View>
+            </View>
+          ))}
+
+          <View style={styles.divider} />
+          <Text style={styles.sectionTitle}>Anfitrião</Text>
+          <View style={styles.hostCard}>
+            <Image source={{ uri: 'https://i.pravatar.cc/100?img=8' }} style={styles.hostAvatar} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.hostName}>Carlos Mendes</Text>
+              <Text style={styles.hostSub}>Superhost ⭐ · No ReservaGO desde 2022</Text>
+            </View>
+            <TouchableOpacity style={styles.contactBtn}>
+              <Text style={styles.contactBtnText}>Contato</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.divider} />
+          <Text style={styles.sectionTitle}>Diretrizes da Hospedagem</Text>
+          {[
+            '👥 Máximo de 4 hóspedes',
+            '🕑 Check-in: 14h · Check-out: 11h',
+            '🚭 Não é permitido fumar dentro',
+            '🧯 Extintor e kit de primeiros socorros',
+            '✅ Cancelamento gratuito até 7 dias',
+          ].map((rule, i) => (
+            <Text key={i} style={styles.ruleText}>{rule}</Text>
+          ))}
+
+          <TouchableOpacity style={styles.reportBtn}>
+            <Text style={styles.reportText}>🚩 Denunciar este anúncio</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -300,6 +342,7 @@ export default function DetailsScreen() {
                 <X size={24} color="#000" />
               </TouchableOpacity>
             </View>
+
             {step === 'dates' && (
               <ScrollView style={{ padding: 20 }}>
                 <View style={styles.dateRow}>
@@ -312,26 +355,67 @@ export default function DetailsScreen() {
                     <Text style={styles.dateInput}>{formatDate(checkOutDate)}</Text>
                   </TouchableOpacity>
                 </View>
+
                 {calendarVisible && (
                   <View style={styles.calendarContainer}>
                     <View style={styles.calWeekRow}>
-                      {['D','S','T','Q','Q','S','S'].map((d, idx) => <Text key={idx} style={styles.calWeekLabel}>{d}</Text>)}
+                      {['D','S','T','Q','Q','S','S'].map((d, idx) => (
+                        <Text key={idx} style={styles.calWeekLabel}>{d}</Text>
+                      ))}
                     </View>
-                    <View style={styles.calendarGrid}>{renderCalendarDays()}</View>
+                    <View style={styles.calendarGrid}>
+                      {renderCalendarDays()}
+                    </View>
                   </View>
                 )}
-                <TouchableOpacity style={[styles.advanceBtn, !datesAreValid && { backgroundColor: '#CCC' }]} disabled={!datesAreValid} onPress={() => setStep('payment')}>
+
+                <TouchableOpacity
+                  style={[styles.advanceBtn, !datesAreValid && { backgroundColor: '#CCC' }]}
+                  disabled={!datesAreValid}
+                  onPress={() => setStep('payment')}
+                >
                   <Text style={styles.advanceBtnText}>Continuar</Text>
                 </TouchableOpacity>
               </ScrollView>
             )}
+
             {step === 'payment' && (
               <View style={{ padding: 20 }}>
-                <TouchableOpacity style={[styles.payOption, payMethod === 'pix' && styles.payOptionActive]} onPress={() => setPayMethod('pix')}>
+                <View style={styles.priceSummary}>
+                  <Text style={styles.priceSummaryTitle}>Resumo</Text>
+                  <View style={styles.priceSummaryRow}>
+                    <Text style={styles.priceSummaryLabel}>R$ {priceNum} × {nightCount} noite(s)</Text>
+                    <Text style={styles.priceSummaryValue}>R$ {subtotal.toFixed(2)}</Text>
+                  </View>
+                  <View style={styles.priceSummaryRow}>
+                    <Text style={styles.priceSummaryLabel}>Taxa de serviço (10%)</Text>
+                    <Text style={styles.priceSummaryValue}>R$ {serviceFee.toFixed(2)}</Text>
+                  </View>
+                  {payMethod === 'pix' && (
+                    <View style={styles.priceSummaryRow}>
+                      <Text style={[styles.priceSummaryLabel, { color: '#2D5A27' }]}>Desconto PIX (5%)</Text>
+                      <Text style={[styles.priceSummaryValue, { color: '#2D5A27' }]}>- R$ {(total * 0.05).toFixed(2)}</Text>
+                    </View>
+                  )}
+                  <View style={[styles.priceSummaryRow, { marginTop: 8, borderTopWidth: 1, borderColor: '#EEE', paddingTop: 8 }]}>
+                    <Text style={{ fontWeight: 'bold', fontSize: 16 }}>Total</Text>
+                    <Text style={{ fontWeight: 'bold', fontSize: 16 }}>
+                      R$ {(payMethod === 'pix' ? total * 0.95 : total).toFixed(2)}
+                    </Text>
+                  </View>
+                </View>
+
+                <TouchableOpacity
+                  style={[styles.payOption, payMethod === 'pix' && styles.payOptionActive]}
+                  onPress={() => setPayMethod('pix')}
+                >
                   <Text style={{ fontWeight: 'bold' }}>Pagar com PIX (5% OFF)</Text>
                   {payMethod === 'pix' && <Check size={20} color="#2D5A27" />}
                 </TouchableOpacity>
-                <TouchableOpacity style={[styles.payOption, payMethod === 'card' && styles.payOptionActive]} onPress={() => setPayMethod('card')}>
+                <TouchableOpacity
+                  style={[styles.payOption, payMethod === 'card' && styles.payOptionActive]}
+                  onPress={() => setPayMethod('card')}
+                >
                   <Text style={{ fontWeight: 'bold' }}>Cartão de Crédito</Text>
                   {payMethod === 'card' && <Check size={20} color="#2D5A27" />}
                 </TouchableOpacity>
@@ -370,10 +454,23 @@ const styles = StyleSheet.create({
   amenitiesGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 15 },
   amenityItem: { flexDirection: 'row', alignItems: 'center', width: '45%', gap: 8 },
   amenityLabel: { fontSize: 14 },
-  mapPlaceholder: { height: 150, borderRadius: 14, overflow: 'hidden', backgroundColor: '#EEE' },
-  mapImage: { width: '100%', height: '100%' },
-  mapOverlay: { position: 'absolute', bottom: 0, width: '100%', backgroundColor: 'rgba(0,0,0,0.4)', padding: 10, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  mapPlaceholder: { height: 100, borderRadius: 14, overflow: 'hidden', backgroundColor: '#D1E8CF', justifyContent: 'center', alignItems: 'center' },
+  mapOverlay: { width: '100%', backgroundColor: 'rgba(0,0,0,0.4)', padding: 10, flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 14 },
   mapText: { color: '#fff', fontSize: 12, fontWeight: 'bold' },
+  reviewCard: { flexDirection: 'row', gap: 12, marginBottom: 20 },
+  reviewAvatar: { width: 44, height: 44, borderRadius: 22 },
+  reviewAuthor: { fontWeight: 'bold', fontSize: 14 },
+  reviewDate: { fontSize: 12, color: '#9CA3AF' },
+  reviewComment: { fontSize: 13, color: '#4B5563', lineHeight: 18, marginTop: 2 },
+  hostCard: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16, backgroundColor: '#F9FAFB', borderRadius: 14 },
+  hostAvatar: { width: 50, height: 50, borderRadius: 25 },
+  hostName: { fontWeight: 'bold', fontSize: 15 },
+  hostSub: { fontSize: 12, color: '#6B7280', marginTop: 2 },
+  contactBtn: { backgroundColor: '#2D5A27', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 },
+  contactBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 13 },
+  ruleText: { fontSize: 14, color: '#4B5563', marginBottom: 8, lineHeight: 20 },
+  reportBtn: { marginTop: 20, alignItems: 'center' },
+  reportText: { color: '#EF4444', fontSize: 14 },
   footer: { position: 'absolute', bottom: 0, width: '100%', backgroundColor: '#fff', padding: 20, borderTopWidth: 1, borderColor: '#EEE', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   footerPrice: { fontSize: 20, fontWeight: 'bold' },
   footerNight: { color: '#6B7280' },
@@ -389,6 +486,7 @@ const styles = StyleSheet.create({
   dateLabel: { fontSize: 10, fontWeight: 'bold', color: '#999' },
   dateInput: { fontSize: 16, fontWeight: 'bold', marginTop: 4 },
   calendarContainer: { padding: 15, backgroundColor: '#F9F9F9', borderRadius: 12, marginBottom: 20 },
+  calendarGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 5, justifyContent: 'center' },
   calDay: { width: 35, height: 35, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff', borderRadius: 18, borderWidth: 1, borderColor: '#EEE' },
   calDayInRange: { backgroundColor: '#D1E8CF', borderColor: '#D1E8CF' },
   calDaySelected: { backgroundColor: '#2D5A27', borderColor: '#2D5A27' },
@@ -399,6 +497,11 @@ const styles = StyleSheet.create({
   calDayText: { fontSize: 12 },
   advanceBtn: { backgroundColor: '#2D5A27', padding: 18, borderRadius: 15, alignItems: 'center', marginTop: 20 },
   advanceBtnText: { color: '#fff', fontWeight: 'bold' },
+  priceSummary: { backgroundColor: '#F9FAFB', borderRadius: 14, padding: 16, marginBottom: 20 },
+  priceSummaryTitle: { fontWeight: 'bold', fontSize: 16, marginBottom: 12 },
+  priceSummaryRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
+  priceSummaryLabel: { color: '#4B5563', fontSize: 14 },
+  priceSummaryValue: { fontWeight: '600', fontSize: 14 },
   payOption: { flexDirection: 'row', justifyContent: 'space-between', padding: 15, borderWidth: 1, borderColor: '#DDD', borderRadius: 12, marginBottom: 10 },
   payOptionActive: { borderColor: '#2D5A27', backgroundColor: '#F0F7F0' },
 });
