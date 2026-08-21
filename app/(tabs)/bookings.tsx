@@ -4,9 +4,20 @@ import { useBookings } from '../../context/BookingContext';
 import { Calendar, MapPin, ChevronRight, X, CreditCard } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 
+type Booking = {
+  propertyId: string;
+  status: string;
+  checkIn?: string;
+  checkOut?: string;
+  nights?: number;
+  date?: string;
+  total?: number;
+  payMethod?: string;
+};
+
 export default function BookingsScreen() {
   const { bookings, cancelBooking } = useBookings();
-  const { allProperties } = useListings(); // ✅ Linkando com o estado real de propriedades
+  const { allProperties } = useListings();
   const router = useRouter();
 
   const handleCancel = (propertyId: string, propertyTitle: string) => {
@@ -15,17 +26,13 @@ export default function BookingsScreen() {
       `Tem certeza que deseja cancelar a reserva de "${propertyTitle}"?`,
       [
         { text: 'Não', style: 'cancel' },
-        {
-          text: 'Sim, cancelar',
-          style: 'destructive',
-          onPress: () => cancelBooking(propertyId),
-        },
+        { text: 'Sim, cancelar', style: 'destructive', onPress: () => cancelBooking(propertyId) },
       ]
     );
   };
 
-  const renderBookingItem = ({ item }: { item: any }) => {
-    const property = allProperties.find(p => p.id === item.propertyId);
+  const renderBookingItem = ({ item }: { item: Booking }) => {
+    const property = allProperties.find((p) => p.id === item.propertyId);
     if (!property) return null;
     const isActive = item.status === 'reservada';
 
@@ -99,7 +106,7 @@ export default function BookingsScreen() {
       {bookings.length > 0 ? (
         <FlatList
           data={bookings}
-          keyExtractor={(item, index) => index.toString()}
+          keyExtractor={(_, index) => index.toString()}
           renderItem={renderBookingItem}
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}

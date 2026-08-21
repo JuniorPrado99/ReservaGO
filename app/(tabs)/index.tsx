@@ -1,20 +1,25 @@
-import { useState, useEffect, useRef } from 'react';
-import {
-  StyleSheet,
-  Text,
-  View,
-  ScrollView,
-  TouchableOpacity,
-  TextInput,
-  FlatList,
-  BackHandler,
-  Keyboard,
-  Modal,
-} from 'react-native';
 import { useRouter } from 'expo-router';
+import {
+  ChevronDown, ChevronUp,
+  Droplets, Search,
+  SlidersHorizontal,
+  TreePine,
+  Waves,
+  X,
+} from 'lucide-react-native';
+import { useEffect, useRef, useState } from 'react';
+import {
+  BackHandler,
+  FlatList,
+  Keyboard, Modal,
+  ScrollView,
+  StyleSheet, Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { PropertyCard } from '../../components/PropertyCard';
 import { useListings } from '../../context/ListingContext';
-import { Waves, TreePine, Droplets, Search, X, SlidersHorizontal, ChevronDown, ChevronUp } from 'lucide-react-native';
 
 const CATEGORIES = [
   { id: '1', name: 'Praia Privativa', icon: Waves },
@@ -37,22 +42,55 @@ const PRICE_RANGES = [
   { id: 'acima800', label: 'Acima de R$ 800', min: 800, max: Infinity },
 ];
 
+const SECTIONS: Record<string, { title: string; subCategory: string }[]> = {
+  'Praia Privativa': [
+    { title: '🔥 Populares', subCategory: 'Populares' },
+    { title: '☀️ Praias do Nordeste', subCategory: 'Nordeste' },
+    { title: '🌊 Praias do Sul', subCategory: 'Sul' },
+  ],
+  Campo: [
+    { title: '🔥 Populares', subCategory: 'Populares' },
+    { title: '🏔️ Nas Montanhas', subCategory: 'Montanhas' },
+    { title: '🌾 Nas Planícies', subCategory: 'Planícies' },
+  ],
+  Cachoeira: [
+    { title: '🔥 Populares', subCategory: 'Populares' },
+    { title: '🌿 Centro-Oeste', subCategory: 'Centro-Oeste' },
+    { title: '💦 Sudeste', subCategory: 'Sudeste' },
+  ],
+};
+
+type Property = {
+  id: string;
+  title: string;
+  price: number;
+  location: string;
+  description: string;
+  image: string;
+  isolationLevel?: string;
+  hostId?: string;
+  category?: string;
+  subCategory?: string;
+};
+
+type PriceRange = (typeof PRICE_RANGES)[number];
+type IsolationOption = (typeof ISOLATION_OPTIONS)[number];
+
 export default function HomeScreen() {
   const router = useRouter();
-  const { allProperties = [] } = useListings() || {}; // ✅ Usando dados reais e centralizados do Supabase
+  const { allProperties = [] } = useListings() || {};
+
   const [selectedCategory, setSelectedCategory] = useState('Praia Privativa');
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
+  const [isExploreAll, setIsExploreAll] = useState(false);
   const inputRef = useRef<TextInput>(null);
 
   const [filterModalVisible, setFilterModalVisible] = useState(false);
-  const [selectedPriceRange, setSelectedPriceRange] = useState(PRICE_RANGES[0]);
-  const [selectedIsolation, setSelectedIsolation] = useState(ISOLATION_OPTIONS[0]);
-
-  const [tempPriceRange, setTempPriceRange] = useState(PRICE_RANGES[0]);
-  const [tempIsolation, setTempIsolation] = useState(ISOLATION_OPTIONS[0]);
-
-  const [isExploreAll, setIsExploreAll] = useState(false);
+  const [selectedPriceRange, setSelectedPriceRange] = useState<PriceRange>(PRICE_RANGES[0]);
+  const [selectedIsolation, setSelectedIsolation] = useState<IsolationOption>(ISOLATION_OPTIONS[0]);
+  const [tempPriceRange, setTempPriceRange] = useState<PriceRange>(PRICE_RANGES[0]);
+  const [tempIsolation, setTempIsolation] = useState<IsolationOption>(ISOLATION_OPTIONS[0]);
 
   const activeFiltersCount = [
     selectedPriceRange.id !== 'todos',
@@ -61,14 +99,8 @@ export default function HomeScreen() {
 
   useEffect(() => {
     const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (isSearching) {
-        cancelSearch();
-        return true;
-      }
-      if (isExploreAll) {
-        setIsExploreAll(false);
-        return true;
-      }
+      if (isSearching) { cancelSearch(); return true; }
+      if (isExploreAll) { setIsExploreAll(false); return true; }
       return false;
     });
     return () => backHandler.remove();
@@ -97,32 +129,16 @@ export default function HomeScreen() {
     setTempIsolation(ISOLATION_OPTIONS[0]);
   };
 
-  const applyActiveFilters = (list: any[]) => {
-    return list.filter(item => {
-      const passPrice =
-        item.price >= selectedPriceRange.min && item.price <= selectedPriceRange.max;
+  const applyActiveFilters = (list: Property[]) =>
+    list.filter((item) => {
+      const passPrice = item.price >= selectedPriceRange.min && item.price <= selectedPriceRange.max;
       const passIsolation =
         selectedIsolation.id === 'todos' ||
         (item.isolationLevel ?? '').toLowerCase() === selectedIsolation.id.toLowerCase();
       return passPrice && passIsolation;
     });
-  };
 
-  const searchResults = applyActiveFilters(
-    allProperties.filter(item => {
-      if (!searchQuery.trim()) return false;
-      const query = searchQuery.toLowerCase().trim();
-      const title = item.title ? item.title.toLowerCase() : '';
-      const location = item.location ? item.location.toLowerCase() : '';
-      return title.includes(query) || location.includes(query);
-    })
-  );
-
-  const exploreAllResults = applyActiveFilters(
-    allProperties.filter(item => item.category === selectedCategory)
-  );
-
-  const navigateToDetails = (item: any) => {
+  const navigateToDetails = (item: Property) => {
     router.push({
       pathname: '/details',
       params: {
@@ -133,18 +149,32 @@ export default function HomeScreen() {
         description: item.description,
         image: item.image,
         isolationLevel: item.isolationLevel,
-        hostId: item.hostId, // ✅ Repassando a propriedade de posse do anfitrião
+        hostId: item.hostId,
       },
     });
   };
 
+  const searchResults = applyActiveFilters(
+    allProperties.filter((item) => {
+      if (!searchQuery.trim()) return false;
+      const query = searchQuery.toLowerCase().trim();
+      return (
+        item.title?.toLowerCase().includes(query) ||
+        item.location?.toLowerCase().includes(query)
+      );
+    })
+  );
+
+  const exploreAllResults = applyActiveFilters(
+    allProperties.filter((item) => item.category === selectedCategory)
+  );
+
   const renderSection = (title: string, subCategoryName: string) => {
     const filtered = applyActiveFilters(
       allProperties.filter(
-        item => item.category === selectedCategory && item.subCategory === subCategoryName
+        (item) => item.category === selectedCategory && item.subCategory === subCategoryName
       )
     );
-        
     if (filtered.length === 0) return null;
     return (
       <View style={styles.sectionContainer}>
@@ -155,8 +185,8 @@ export default function HomeScreen() {
           contentContainerStyle={styles.horizontalScroll}
         >
           {filtered.map((item) => (
-            <TouchableOpacity 
-              key={item.id} 
+            <TouchableOpacity
+              key={item.id}
               style={{ width: 300, marginRight: 15 }}
               activeOpacity={0.9}
               onPress={() => navigateToDetails(item)}
@@ -173,8 +203,8 @@ export default function HomeScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <View style={styles.searchRow}>
-          <TouchableOpacity 
-            activeOpacity={1} 
+          <TouchableOpacity
+            activeOpacity={1}
             style={[styles.searchBar, isSearching && styles.searchBarActive]}
             onPress={() => inputRef.current?.focus()}
           >
@@ -198,6 +228,7 @@ export default function HomeScreen() {
               </TouchableOpacity>
             )}
           </TouchableOpacity>
+
           {isSearching ? (
             <TouchableOpacity onPress={cancelSearch} style={styles.cancelButton}>
               <Text style={styles.cancelText}>Cancelar</Text>
@@ -249,23 +280,11 @@ export default function HomeScreen() {
             {CATEGORIES.map((cat) => (
               <TouchableOpacity
                 key={cat.id}
-                style={[
-                  styles.categoryItem,
-                  selectedCategory === cat.name && styles.categoryActive
-                ]}
-                onPress={() => {
-                  setSelectedCategory(cat.name);
-                  setIsExploreAll(false);
-                }}
+                style={[styles.categoryItem, selectedCategory === cat.name && styles.categoryActive]}
+                onPress={() => { setSelectedCategory(cat.name); setIsExploreAll(false); }}
               >
-                <cat.icon
-                  size={22}
-                  color={selectedCategory === cat.name ? '#2D5A27' : '#6B7280'}
-                />
-                <Text style={[
-                  styles.categoryText,
-                  selectedCategory === cat.name && styles.categoryTextActive
-                ]}>
+                <cat.icon size={22} color={selectedCategory === cat.name ? '#2D5A27' : '#6B7280'} />
+                <Text style={[styles.categoryText, selectedCategory === cat.name && styles.categoryTextActive]}>
                   {cat.name}
                 </Text>
               </TouchableOpacity>
@@ -291,16 +310,13 @@ export default function HomeScreen() {
           ) : (
             <FlatList
               data={searchResults}
-              keyExtractor={item => item.id}
+              keyExtractor={(item) => item.id}
               contentContainerStyle={styles.searchResults}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
               ItemSeparatorComponent={() => <View style={{ height: 20 }} />}
               renderItem={({ item }) => (
-                <TouchableOpacity
-                  activeOpacity={0.9}
-                  onPress={() => navigateToDetails(item)}
-                >
+                <TouchableOpacity activeOpacity={0.9} onPress={() => navigateToDetails(item)}>
                   <PropertyCard {...item} />
                 </TouchableOpacity>
               )}
@@ -327,7 +343,7 @@ export default function HomeScreen() {
           ) : (
             <FlatList
               data={exploreAllResults}
-              keyExtractor={item => item.id}
+              keyExtractor={(item) => item.id}
               contentContainerStyle={styles.searchResults}
               showsVerticalScrollIndicator={false}
               ItemSeparatorComponent={() => <View style={{ height: 20 }} />}
@@ -340,35 +356,13 @@ export default function HomeScreen() {
           )}
         </View>
       ) : (
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}
-        >
-          {selectedCategory === 'Praia Privativa' && (
-            <>
-              {renderSection('🔥 Populares', 'Populares')}
-              {renderSection('☀️ Praias do Nordeste', 'Nordeste')}
-              {renderSection('🌊 Praias do Sul', 'Sul')}
-            </>
-          )}
-          {selectedCategory === 'Campo' && (
-            <>
-              {renderSection('🔥 Populares', 'Populares')}
-              {renderSection('🏔️ Nas Montanhas', 'Montanhas')}
-              {renderSection('🌾 Nas Planícies', 'Planícies')}
-            </>
-          )}
-          {selectedCategory === 'Cachoeira' && (
-            <>
-              {renderSection('🔥 Populares', 'Populares')}
-              {renderSection('🌿 Centro-Oeste', 'Centro-Oeste')}
-              {renderSection('💦 Sudeste', 'Sudeste')}
-            </>
-          )}
-          <TouchableOpacity
-            style={styles.seeAllButton}
-            onPress={() => setIsExploreAll(true)}
-          >
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+          {SECTIONS[selectedCategory]?.map(({ title, subCategory }) => (
+            <View key={title}>
+              {renderSection(title, subCategory)}
+            </View>
+          ))}
+          <TouchableOpacity style={styles.seeAllButton} onPress={() => setIsExploreAll(true)}>
             <Text style={styles.seeAllText}>Explorar todas as opções</Text>
             <ChevronDown size={16} color="#374151" style={{ marginLeft: 6 }} />
           </TouchableOpacity>
@@ -388,19 +382,13 @@ export default function HomeScreen() {
             <ScrollView contentContainerStyle={styles.modalBody}>
               <Text style={styles.filterSectionLabel}>Faixa de Preço</Text>
               <View style={styles.filterOptionsGrid}>
-                {PRICE_RANGES.map(range => (
+                {PRICE_RANGES.map((range) => (
                   <TouchableOpacity
                     key={range.id}
-                    style={[
-                      styles.filterOptionChip,
-                      tempPriceRange.id === range.id && styles.filterOptionChipActive,
-                    ]}
+                    style={[styles.filterOptionChip, tempPriceRange.id === range.id && styles.filterOptionChipActive]}
                     onPress={() => setTempPriceRange(range)}
                   >
-                    <Text style={[
-                      styles.filterOptionText,
-                      tempPriceRange.id === range.id && styles.filterOptionTextActive,
-                    ]}>
+                    <Text style={[styles.filterOptionText, tempPriceRange.id === range.id && styles.filterOptionTextActive]}>
                       {range.label}
                     </Text>
                   </TouchableOpacity>
@@ -409,25 +397,17 @@ export default function HomeScreen() {
               <View style={styles.filterDivider} />
               <Text style={styles.filterSectionLabel}>Nível de Isolamento</Text>
               <View style={styles.filterIsolationList}>
-                {ISOLATION_OPTIONS.map(opt => (
+                {ISOLATION_OPTIONS.map((opt) => (
                   <TouchableOpacity
                     key={opt.id}
-                    style={[
-                      styles.filterIsolationItem,
-                      tempIsolation.id === opt.id && styles.filterIsolationItemActive,
-                    ]}
+                    style={[styles.filterIsolationItem, tempIsolation.id === opt.id && styles.filterIsolationItemActive]}
                     onPress={() => setTempIsolation(opt)}
                   >
                     <Text style={styles.filterIsolationEmoji}>{opt.emoji}</Text>
-                    <Text style={[
-                      styles.filterIsolationLabel,
-                      tempIsolation.id === opt.id && styles.filterIsolationLabelActive,
-                    ]}>
+                    <Text style={[styles.filterIsolationLabel, tempIsolation.id === opt.id && styles.filterIsolationLabelActive]}>
                       {opt.label}
                     </Text>
-                    {tempIsolation.id === opt.id && (
-                      <View style={styles.filterCheckDot} />
-                    )}
+                    {tempIsolation.id === opt.id && <View style={styles.filterCheckDot} />}
                   </TouchableOpacity>
                 ))}
               </View>
@@ -461,66 +441,33 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
   },
   searchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginHorizontal: 20,
-    marginBottom: 16,
-    marginTop: 10,
+    flexDirection: 'row', alignItems: 'center',
+    marginHorizontal: 20, marginBottom: 16, marginTop: 10,
   },
   searchBar: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFF',
-    paddingHorizontal: 15,
-    paddingVertical: 12,
-    borderRadius: 30,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-    borderWidth: 1,
-    borderColor: '#F3F4F6',
+    flex: 1, flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#FFF', paddingHorizontal: 15, paddingVertical: 12,
+    borderRadius: 30, shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1, shadowRadius: 4, elevation: 3, borderWidth: 1, borderColor: '#F3F4F6',
   },
   searchBarActive: { borderColor: '#2D5A27' },
   searchInput: { flex: 1, fontSize: 15, color: '#1F2937', paddingVertical: 0 },
   cancelButton: { marginLeft: 12, paddingVertical: 6 },
   cancelText: { fontSize: 15, color: '#2D5A27', fontWeight: '600' },
   filterButton: {
-    marginLeft: 10,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#F0F7F0',
-    borderWidth: 1,
-    borderColor: '#2D5A27',
-    justifyContent: 'center',
-    alignItems: 'center',
-    position: 'relative',
+    marginLeft: 10, width: 44, height: 44, borderRadius: 22,
+    backgroundColor: '#F0F7F0', borderWidth: 1, borderColor: '#2D5A27',
+    justifyContent: 'center', alignItems: 'center', position: 'relative',
   },
   filterBadge: {
-    position: 'absolute',
-    top: -4,
-    right: -4,
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: '#2D5A27',
-    justifyContent: 'center',
-    alignItems: 'center',
+    position: 'absolute', top: -4, right: -4, width: 18, height: 18,
+    borderRadius: 9, backgroundColor: '#2D5A27', justifyContent: 'center', alignItems: 'center',
   },
   filterBadgeText: { color: '#fff', fontSize: 10, fontWeight: 'bold' },
   activeFiltersRow: { marginBottom: 8 },
   activeFilterChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#E8F5E9',
-    borderWidth: 1,
-    borderColor: '#2D5A27',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
+    flexDirection: 'row', alignItems: 'center', backgroundColor: '#E8F5E9',
+    borderWidth: 1, borderColor: '#2D5A27', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20,
   },
   activeFilterChipText: { fontSize: 12, color: '#2D5A27', fontWeight: '600' },
   categoriesContainer: { flexDirection: 'row', justifyContent: 'space-around', paddingBottom: 0 },
@@ -533,45 +480,56 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 18, fontWeight: 'bold', marginLeft: 20, marginBottom: 15, color: '#1F2937' },
   horizontalScroll: { paddingLeft: 20, paddingRight: 20 },
   seeAllButton: {
-    margin: 20,
-    padding: 15,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    alignItems: 'center',
-    marginTop: 40,
-    flexDirection: 'row',
-    justifyContent: 'center',
+    margin: 20, marginTop: 40, padding: 15, borderRadius: 12, borderWidth: 1,
+    borderColor: '#E5E7EB', alignItems: 'center', flexDirection: 'row', justifyContent: 'center',
   },
   seeAllText: { fontWeight: '600', color: '#374151' },
   searchResults: { padding: 20, paddingBottom: 100 },
   searchHint: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 },
   searchHintText: { fontSize: 15, color: '#9CA3AF', textAlign: 'center', lineHeight: 22 },
-  exploreAllHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#F3F4F6', gap: 12 },
+  exploreAllHeader: {
+    flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20,
+    paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#F3F4F6', gap: 12,
+  },
   exploreBackBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   exploreBackText: { fontSize: 14, color: '#2D5A27', fontWeight: '600' },
   exploreAllTitle: { fontSize: 15, fontWeight: 'bold', color: '#1F2937' },
   modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.45)' },
   modalSheet: { backgroundColor: '#fff', borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '80%' },
   modalHandle: { width: 40, height: 4, backgroundColor: '#DDD', alignSelf: 'center', marginVertical: 12, borderRadius: 2 },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
+  modalHeader: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: 20, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: '#F3F4F6',
+  },
   modalTitle: { fontSize: 18, fontWeight: 'bold', color: '#1F2937' },
   modalBody: { padding: 20, paddingBottom: 10 },
-  filterSectionLabel: { fontSize: 14, fontWeight: '700', color: '#374151', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 14 },
+  filterSectionLabel: {
+    fontSize: 14, fontWeight: '700', color: '#374151',
+    textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 14,
+  },
   filterOptionsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 8 },
-  filterOptionChip: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20, borderWidth: 1.5, borderColor: '#E5E7EB', backgroundColor: '#F9FAFB' },
+  filterOptionChip: {
+    paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20,
+    borderWidth: 1.5, borderColor: '#E5E7EB', backgroundColor: '#F9FAFB',
+  },
   filterOptionChipActive: { borderColor: '#2D5A27', backgroundColor: '#F0F7F0' },
   filterOptionText: { fontSize: 13, color: '#4B5563', fontWeight: '500' },
   filterOptionTextActive: { color: '#2D5A27', fontWeight: '700' },
   filterDivider: { height: 1, backgroundColor: '#F3F4F6', marginVertical: 20 },
   filterIsolationList: { gap: 10 },
-  filterIsolationItem: { flexDirection: 'row', alignItems: 'center', padding: 14, borderRadius: 14, borderWidth: 1.5, borderColor: '#E5E7EB', backgroundColor: '#F9FAFB' },
+  filterIsolationItem: {
+    flexDirection: 'row', alignItems: 'center', padding: 14,
+    borderRadius: 14, borderWidth: 1.5, borderColor: '#E5E7EB', backgroundColor: '#F9FAFB',
+  },
   filterIsolationItemActive: { borderColor: '#2D5A27', backgroundColor: '#F0F7F0' },
   filterIsolationEmoji: { fontSize: 20, marginRight: 12 },
   filterIsolationLabel: { flex: 1, fontSize: 14, color: '#4B5563', fontWeight: '500' },
   filterIsolationLabelActive: { color: '#2D5A27', fontWeight: '700' },
   filterCheckDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#2D5A27' },
-  modalFooter: { flexDirection: 'row', gap: 12, padding: 20, paddingBottom: 34, borderTopWidth: 1, borderTopColor: '#F3F4F6' },
+  modalFooter: {
+    flexDirection: 'row', gap: 12, padding: 20,
+    paddingBottom: 34, borderTopWidth: 1, borderTopColor: '#F3F4F6',
+  },
   clearBtn: { flex: 1, padding: 15, borderRadius: 14, borderWidth: 1, borderColor: '#E5E7EB', alignItems: 'center' },
   clearBtnText: { fontWeight: '600', color: '#374151', fontSize: 15 },
   applyBtn: { flex: 2, padding: 15, borderRadius: 14, backgroundColor: '#2D5A27', alignItems: 'center' },

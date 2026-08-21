@@ -6,14 +6,30 @@ import {
 } from 'react-native';
 import { Mail, ChevronRight, Send, X, ShieldCheck } from 'lucide-react-native';
 
-// Conversas simuladas (mais recentes primeiro)
-const INITIAL_CHATS = [
+type Message = {
+  id: string;
+  from: 'me' | 'them';
+  text: string;
+};
+
+type Chat = {
+  id: string;
+  hostName: string;
+  lastMessage: string;
+  time: string;
+  avatar: string | null;
+  unread: boolean;
+  isSupport: boolean;
+  messages: Message[];
+};
+
+const INITIAL_CHATS: Chat[] = [
   {
     id: 'support',
     hostName: 'Suporte ReservaGO',
     lastMessage: 'Olá! Como podemos te ajudar hoje?',
     time: 'Agora',
-    avatar: null, // usa ícone de escudo
+    avatar: null,
     unread: true,
     isSupport: true,
     messages: [
@@ -48,14 +64,19 @@ const INITIAL_CHATS = [
   },
 ];
 
-export default function MessagesScreen() {
-  const [chats, setChats]               = useState(INITIAL_CHATS);
-  const [activeChat, setActiveChat]     = useState<any>(null);
-  const [inputText, setInputText]       = useState('');
+const SUPPORT_REPLY: Message = {
+  id: '',
+  from: 'them',
+  text: 'Obrigado por entrar em contato! Nossa equipe responderá em breve. Tempo médio: 15 minutos. 🌿',
+};
 
-  const openChat = (chat: any) => {
-    // Marca como lido
-    setChats(prev => prev.map(c => c.id === chat.id ? { ...c, unread: false } : c));
+export default function MessagesScreen() {
+  const [chats, setChats] = useState<Chat[]>(INITIAL_CHATS);
+  const [activeChat, setActiveChat] = useState<Chat | null>(null);
+  const [inputText, setInputText] = useState('');
+
+  const openChat = (chat: Chat) => {
+    setChats((prev) => prev.map((c) => (c.id === chat.id ? { ...c, unread: false } : c)));
     setActiveChat({ ...chat, unread: false });
   };
 
@@ -63,28 +84,28 @@ export default function MessagesScreen() {
     const text = inputText.trim();
     if (!text || !activeChat) return;
 
-    const newMsg = { id: String(Date.now()), from: 'me', text };
-    const updatedChat = { ...activeChat, messages: [...activeChat.messages, newMsg], lastMessage: text, time: 'Agora' };
+    const newMsg: Message = { id: String(Date.now()), from: 'me', text };
+    const updatedChat: Chat = {
+      ...activeChat,
+      messages: [...activeChat.messages, newMsg],
+      lastMessage: text,
+      time: 'Agora',
+    };
+
     setActiveChat(updatedChat);
-    setChats(prev => prev.map(c => c.id === activeChat.id ? updatedChat : c));
+    setChats((prev) => prev.map((c) => (c.id === activeChat.id ? updatedChat : c)));
     setInputText('');
 
-    // Resposta automática do suporte
     if (activeChat.isSupport) {
       setTimeout(() => {
-        const reply = {
-          id: String(Date.now() + 1),
-          from: 'them',
-          text: 'Obrigado por entrar em contato! Nossa equipe responderá em breve. Tempo médio: 15 minutos. 🌿',
-        };
-        setActiveChat((prev: any) => prev ? { ...prev, messages: [...prev.messages, reply] } : prev);
+        const reply: Message = { ...SUPPORT_REPLY, id: String(Date.now() + 1) };
+        setActiveChat((prev) => prev ? { ...prev, messages: [...prev.messages, reply] } : prev);
       }, 1200);
     }
   };
 
   return (
     <View style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
         <Text style={styles.title}>Mensagens</Text>
       </View>
@@ -92,10 +113,9 @@ export default function MessagesScreen() {
       {chats.length > 0 ? (
         <FlatList
           data={chats}
-          keyExtractor={item => item.id}
+          keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
             <TouchableOpacity style={styles.chatCard} onPress={() => openChat(item)}>
-              {/* Avatar */}
               {item.isSupport ? (
                 <View style={styles.supportAvatar}>
                   <ShieldCheck size={24} color="#2D5A27" />
@@ -135,14 +155,12 @@ export default function MessagesScreen() {
         </View>
       )}
 
-      {/* ── MODAL DE CHAT ─────────────────────────────────────────────────── */}
       <Modal visible={!!activeChat} animationType="slide">
         <KeyboardAvoidingView
           style={{ flex: 1, backgroundColor: '#fff' }}
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           keyboardVerticalOffset={0}
         >
-          {/* Chat header */}
           <View style={styles.chatModalHeader}>
             <TouchableOpacity onPress={() => setActiveChat(null)}>
               <X size={24} color="#1F2937" />
@@ -158,22 +176,18 @@ export default function MessagesScreen() {
                 <ShieldCheck size={18} color="#2D5A27" />
               </View>
             ) : (
-              <Image source={{ uri: activeChat?.avatar }} style={styles.chatModalAvatar} />
+              <Image source={{ uri: activeChat?.avatar! }} style={styles.chatModalAvatar} />
             )}
           </View>
 
-          {/* Mensagens */}
           <ScrollView
             contentContainerStyle={styles.messagesList}
             showsVerticalScrollIndicator={false}
           >
-            {activeChat?.messages.map((msg: any) => (
+            {activeChat?.messages.map((msg) => (
               <View
                 key={msg.id}
-                style={[
-                  styles.bubble,
-                  msg.from === 'me' ? styles.bubbleMe : styles.bubbleThem,
-                ]}
+                style={[styles.bubble, msg.from === 'me' ? styles.bubbleMe : styles.bubbleThem]}
               >
                 <Text style={msg.from === 'me' ? styles.bubbleTextMe : styles.bubbleTextThem}>
                   {msg.text}
@@ -182,7 +196,6 @@ export default function MessagesScreen() {
             ))}
           </ScrollView>
 
-          {/* Input */}
           <View style={styles.inputBar}>
             <TextInput
               style={styles.messageInput}
@@ -211,8 +224,6 @@ const styles = StyleSheet.create({
     borderBottomColor: '#F3F4F6',
   },
   title: { fontSize: 26, fontWeight: 'bold', color: '#1F2937' },
-
-  // Lista de chats
   chatCard: {
     flexDirection: 'row',
     padding: 16,
@@ -220,20 +231,18 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#F9FAFB',
   },
-  avatar:       { width: 52, height: 52, borderRadius: 26, marginRight: 12 },
-  supportAvatar:{
+  avatar: { width: 52, height: 52, borderRadius: 26, marginRight: 12 },
+  supportAvatar: {
     width: 52, height: 52, borderRadius: 26, marginRight: 12,
     backgroundColor: '#F0F7F0', justifyContent: 'center', alignItems: 'center',
   },
   chatContent: { flex: 1 },
-  chatHeader:  { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
-  hostName:    { fontSize: 15, fontWeight: 'bold', color: '#1F2937' },
-  time:        { fontSize: 12, color: '#9CA3AF' },
-  message:     { fontSize: 14, color: '#6B7280' },
-  unreadText:  { color: '#1F2937', fontWeight: '600' },
-  unreadDot:   { width: 10, height: 10, borderRadius: 5, backgroundColor: '#2D5A27', marginRight: 10 },
-
-  // Modal header
+  chatHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
+  hostName: { fontSize: 15, fontWeight: 'bold', color: '#1F2937' },
+  time: { fontSize: 12, color: '#9CA3AF' },
+  message: { fontSize: 14, color: '#6B7280' },
+  unreadText: { color: '#1F2937', fontWeight: '600' },
+  unreadDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#2D5A27', marginRight: 10 },
   chatModalHeader: {
     paddingTop: 60,
     paddingHorizontal: 20,
@@ -244,15 +253,13 @@ const styles = StyleSheet.create({
     borderBottomColor: '#F3F4F6',
     backgroundColor: '#fff',
   },
-  chatModalTitle:   { fontSize: 16, fontWeight: 'bold', color: '#1F2937' },
-  chatModalSub:     { fontSize: 12, color: '#2D5A27' },
-  chatModalAvatar:  { width: 40, height: 40, borderRadius: 20 },
-  supportAvatarSm:  {
+  chatModalTitle: { fontSize: 16, fontWeight: 'bold', color: '#1F2937' },
+  chatModalSub: { fontSize: 12, color: '#2D5A27' },
+  chatModalAvatar: { width: 40, height: 40, borderRadius: 20 },
+  supportAvatarSm: {
     width: 40, height: 40, borderRadius: 20,
     backgroundColor: '#F0F7F0', justifyContent: 'center', alignItems: 'center',
   },
-
-  // Bubbles
   messagesList: { padding: 16, paddingBottom: 20 },
   bubble: {
     maxWidth: '75%',
@@ -270,10 +277,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#F3F4F6',
     borderBottomLeftRadius: 4,
   },
-  bubbleTextMe:   { color: '#fff', fontSize: 14, lineHeight: 20 },
+  bubbleTextMe: { color: '#fff', fontSize: 14, lineHeight: 20 },
   bubbleTextThem: { color: '#1F2937', fontSize: 14, lineHeight: 20 },
-
-  // Input bar
   inputBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -303,9 +308,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-
-  // Empty
   emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 },
-  emptyTitle:     { fontSize: 18, fontWeight: 'bold', color: '#374151', marginTop: 15 },
-  emptySub:       { fontSize: 14, color: '#6B7280', textAlign: 'center', marginTop: 8 },
+  emptyTitle: { fontSize: 18, fontWeight: 'bold', color: '#374151', marginTop: 15 },
+  emptySub: { fontSize: 14, color: '#6B7280', textAlign: 'center', marginTop: 8 },
 });

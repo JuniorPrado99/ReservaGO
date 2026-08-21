@@ -1,41 +1,15 @@
 import React, { useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import {
-  View,
-  Text,
-  StyleSheet,
-  Image,
-  TouchableOpacity,
-  ScrollView,
-  Modal,
-  TextInput,
-  KeyboardAvoidingView,
-  Platform,
-  Alert
+  View, Text, StyleSheet, Image, TouchableOpacity,
+  ScrollView, Modal, TextInput, KeyboardAvoidingView,
+  Platform, Alert,
 } from 'react-native';
 import {
-  User,
-  Settings,
-  Bell,
-  ShieldCheck,
-  LogOut,
-  ChevronRight,
-  LogIn,
-  LayoutDashboard,
-  Home,
-  FileText,
-  Trash2,
-  Star,
-  MapPin,
-  Calendar,
-  X,
-  Camera,
-  Check,
-  Eye,
-  EyeOff,
-  Lock,
-  Database,
-  AlertCircle
+  User, Settings, Bell, ShieldCheck, LogOut, ChevronRight,
+  LogIn, LayoutDashboard, Home, FileText, Trash2, Star,
+  MapPin, Calendar, X, Camera, Check, Eye, EyeOff, Lock,
+  Database, AlertCircle,
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../context/AuthContext';
@@ -48,7 +22,7 @@ const PAST_TRIPS = [
 
 const ALL_INTERESTS = [
   'Atividades ao ar livre', 'Esportes aquáticos', 'Gastronomia',
-  'Vinho', 'Trilhas', 'Neve', 'Praia', 'Isolamento'
+  'Vinho', 'Trilhas', 'Neve', 'Praia', 'Isolamento',
 ];
 
 const PRIVACY_SECTIONS = [
@@ -97,7 +71,77 @@ const TERMS_SECTIONS = [
   },
 ];
 
-// Contagem de não lidas vinda do contexto de notificações (dinâmica)
+type InfoSection = { icon: React.ComponentType<any>; title: string; body: string };
+
+type MenuItemProps = {
+  icon: React.ComponentType<any>;
+  title: string;
+  subtitle?: string;
+  onPress: () => void;
+  color?: string;
+  showBadge?: boolean;
+};
+
+const MenuItem = ({ icon: Icon, title, subtitle, onPress, color = '#4B5563', showBadge = false }: MenuItemProps) => (
+  <TouchableOpacity style={styles.menuItem} onPress={onPress}>
+    <View style={styles.menuIconContainer}>
+      <Icon size={22} color={color} />
+      {showBadge && <View style={styles.notificationBadge} />}
+    </View>
+    <View style={styles.menuTextContainer}>
+      <Text style={[styles.menuTitle, color === '#EF4444' && { color: '#EF4444' }]}>{title}</Text>
+      {subtitle && <Text style={styles.menuSubtitle}>{subtitle}</Text>}
+    </View>
+    <ChevronRight size={18} color="#9CA3AF" />
+  </TouchableOpacity>
+);
+
+type InfoModalProps = {
+  visible: boolean;
+  onClose: () => void;
+  title: string;
+  subtitle: string;
+  sections: InfoSection[];
+  footerText: string;
+};
+
+const InfoModal = ({ visible, onClose, title, subtitle, sections, footerText }: InfoModalProps) => (
+  <Modal visible={visible} animationType="slide" transparent>
+    <View style={styles.modalOverlay}>
+      <View style={styles.infoModalContent}>
+        <View style={styles.modalHeader}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.modalTitle}>{title}</Text>
+            <Text style={styles.modalSubtitle}>{subtitle}</Text>
+          </View>
+          <TouchableOpacity onPress={onClose} style={styles.closeModalBtn}>
+            <X size={24} color="#6B7280" />
+          </TouchableOpacity>
+        </View>
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 20 }}>
+          {sections.map((section, index) => {
+            const Icon = section.icon;
+            return (
+              <View key={index} style={styles.infoSection}>
+                <View style={styles.infoSectionHeader}>
+                  <View style={styles.infoIconCircle}>
+                    <Icon size={18} color="#2D5A27" />
+                  </View>
+                  <Text style={styles.infoSectionTitle}>{section.title}</Text>
+                </View>
+                <Text style={styles.infoSectionBody}>{section.body}</Text>
+                {index < sections.length - 1 && <View style={styles.infoSectionDivider} />}
+              </View>
+            );
+          })}
+          <View style={styles.infoFooter}>
+            <Text style={styles.infoFooterText}>{footerText}</Text>
+          </View>
+        </ScrollView>
+      </View>
+    </View>
+  </Modal>
+);
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -120,23 +164,20 @@ export default function ProfileScreen() {
 
   const pickProfileImage = async () => {
     try {
-      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (permissionResult.granted === false) {
-        Alert.alert("Permissão Necessária", "Você precisa permitir o acesso à galeria para alterar a foto!");
+      const { granted } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!granted) {
+        Alert.alert('Permissão Necessária', 'Você precisa permitir o acesso à galeria para alterar a foto!');
         return;
       }
-      let result = await ImagePicker.launchImageLibraryAsync({
+      const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.8,
       });
-      if (!result.canceled) {
-        setTempAvatar(result.assets[0].uri);
-      }
-    } catch (error) {
-      Alert.alert("Erro", "Ocorreu um problema ao tentar abrir a galeria.");
-      console.log(error);
+      if (!result.canceled) setTempAvatar(result.assets[0].uri);
+    } catch {
+      Alert.alert('Erro', 'Ocorreu um problema ao tentar abrir a galeria.');
     }
   };
 
@@ -157,93 +198,10 @@ export default function ProfileScreen() {
   };
 
   const toggleInterest = (interest: string) => {
-    if (tempInterests.includes(interest)) {
-      setTempInterests(tempInterests.filter(i => i !== interest));
-    } else {
-      setTempInterests([...tempInterests, interest]);
-    }
+    setTempInterests((prev) =>
+      prev.includes(interest) ? prev.filter((i) => i !== interest) : [...prev, interest]
+    );
   };
-
-  const MenuItem = ({
-    icon: Icon,
-    title,
-    subtitle,
-    onPress,
-    color = "#4B5563",
-    showBadge = false,
-  }: {
-    icon: any;
-    title: string;
-    subtitle?: string;
-    onPress: () => void;
-    color?: string;
-    showBadge?: boolean;
-  }) => (
-    <TouchableOpacity style={styles.menuItem} onPress={onPress}>
-      <View style={styles.menuIconContainer}>
-        <Icon size={22} color={color} />
-        {showBadge && <View style={styles.notificationBadge} />}
-      </View>
-      <View style={styles.menuTextContainer}>
-        <Text style={[styles.menuTitle, { color: color === "#EF4444" ? "#EF4444" : "#374151" }]}>{title}</Text>
-        {subtitle && <Text style={styles.menuSubtitle}>{subtitle}</Text>}
-      </View>
-      <ChevronRight size={18} color="#9CA3AF" />
-    </TouchableOpacity>
-  );
-
-  const InfoModal = ({
-    visible,
-    onClose,
-    title,
-    subtitle,
-    sections,
-    footerText,
-  }: {
-    visible: boolean;
-    onClose: () => void;
-    title: string;
-    subtitle: string;
-    sections: { icon: any; title: string; body: string }[];
-    footerText: string;
-  }) => (
-    <Modal visible={visible} animationType="slide" transparent>
-      <View style={styles.modalOverlay}>
-        <View style={styles.infoModalContent}>
-          <View style={styles.modalHeader}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.modalTitle}>{title}</Text>
-              <Text style={styles.modalSubtitle}>{subtitle}</Text>
-            </View>
-            <TouchableOpacity onPress={onClose} style={styles.closeModalBtn}>
-              <X size={24} color="#6B7280" />
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 20 }}>
-            {sections.map((section, index) => {
-              const IconComponent = section.icon;
-              return (
-                <View key={index} style={styles.infoSection}>
-                  <View style={styles.infoSectionHeader}>
-                    <View style={styles.infoIconCircle}>
-                      <IconComponent size={18} color="#2D5A27" />
-                    </View>
-                    <Text style={styles.infoSectionTitle}>{section.title}</Text>
-                  </View>
-                  <Text style={styles.infoSectionBody}>{section.body}</Text>
-                  {index < sections.length - 1 && <View style={styles.infoSectionDivider} />}
-                </View>
-              );
-            })}
-            <View style={styles.infoFooter}>
-              <Text style={styles.infoFooterText}>{footerText}</Text>
-            </View>
-          </ScrollView>
-        </View>
-      </View>
-    </Modal>
-  );
 
   if (!user) {
     return (
@@ -323,7 +281,7 @@ export default function ProfileScreen() {
             <View style={styles.infoSection}>
               <Text style={styles.sectionSubTitle}>Viagens Anteriores</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -20, paddingHorizontal: 20 }}>
-                {PAST_TRIPS.map(trip => (
+                {PAST_TRIPS.map((trip) => (
                   <View key={trip.id} style={styles.pastTripCard}>
                     <Image source={{ uri: trip.image }} style={styles.pastTripImage} />
                     <View style={styles.pastTripOverlay}>
@@ -382,15 +340,12 @@ export default function ProfileScreen() {
 
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>Configurações da Conta</Text>
-
           <MenuItem
             icon={User}
             title="Editar Perfil"
             subtitle="Informações pessoais e interesses"
             onPress={openEditModal}
           />
-
-          {/* ✅ Notificações — navega para tela nova com contagem dinâmica */}
           <MenuItem
             icon={Bell}
             title="Notificações"
@@ -398,14 +353,12 @@ export default function ProfileScreen() {
             onPress={() => router.push('../notifications')}
             showBadge={UNREAD_NOTIFICATIONS > 0}
           />
-
           <MenuItem
             icon={ShieldCheck}
             title="Privacidade"
             subtitle="Coleta de dados e visibilidade"
             onPress={() => setPrivacyVisible(true)}
           />
-
           <MenuItem
             icon={FileText}
             title="Termos de Serviço"
@@ -419,7 +372,6 @@ export default function ProfileScreen() {
             <LogOut size={20} color="#EF4444" />
             <Text style={styles.logoutText}>Sair da conta</Text>
           </TouchableOpacity>
-
           <TouchableOpacity style={styles.deleteButton} onPress={() => {}}>
             <Trash2 size={20} color="#EF4444" />
             <Text style={styles.deleteText}>Excluir conta</Text>
@@ -441,7 +393,6 @@ export default function ProfileScreen() {
                 <X size={24} color="#6B7280" />
               </TouchableOpacity>
             </View>
-
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 20 }}>
               <View style={styles.editAvatarContainer}>
                 <Image source={{ uri: tempAvatar }} style={styles.editAvatarImage} />
@@ -498,7 +449,6 @@ export default function ProfileScreen() {
         sections={PRIVACY_SECTIONS}
         footerText="Última atualização: Janeiro de 2025 · Em conformidade com a LGPD (Lei nº 13.709/2018)"
       />
-
       <InfoModal
         visible={isTermsVisible}
         onClose={() => setTermsVisible(false)}
