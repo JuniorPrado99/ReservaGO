@@ -76,7 +76,7 @@ export default function DetailsScreen() {
   const { user } = useAuth();
   const { favorites, toggleFavorite } = useFavorites();
 
-  const { id, title, price, location, description, image, isolationLevel, hostId } = useLocalSearchParams();
+  const { id, title, price, location, description, image, isolationLevel } = useLocalSearchParams();
   const isFav = favorites.includes(id as string);
 
   const [modalVisible, setModalVisible] = useState(false);
@@ -124,7 +124,6 @@ export default function DetailsScreen() {
       nights: nightCount,
       payMethod,
       total: payMethod === 'pix' ? total * 0.95 : total,
-      hostId: Array.isArray(hostId) ? hostId[0] : hostId ?? '',
     });
     setModalVisible(false);
     Alert.alert('Reserva Confirmada! 🌿', 'Sua viagem foi registrada com sucesso.', [

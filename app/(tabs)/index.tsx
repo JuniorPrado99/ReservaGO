@@ -19,7 +19,7 @@ import {
   View,
 } from 'react-native';
 import { PropertyCard } from '../../components/PropertyCard';
-import { useListings } from '../../context/ListingContext';
+import { Listing, useListings } from '../../context/ListingContext';
 
 const CATEGORIES = [
   { id: '1', name: 'Praia Privativa', icon: Waves },
@@ -60,18 +60,7 @@ const SECTIONS: Record<string, { title: string; subCategory: string }[]> = {
   ],
 };
 
-type Property = {
-  id: string;
-  title: string;
-  price: number;
-  location: string;
-  description: string;
-  image: string;
-  isolationLevel?: string;
-  hostId?: string;
-  category?: string;
-  subCategory?: string;
-};
+type Property = Listing;
 
 type PriceRange = (typeof PRICE_RANGES)[number];
 type IsolationOption = (typeof ISOLATION_OPTIONS)[number];

@@ -56,7 +56,7 @@ export default function BookingsScreen() {
           })
         }
       >
-        <Image source={{ uri: property.image }} style={styles.cardImage} />
+        <Image source={{ uri: property.image ?? undefined }} style={styles.cardImage} />
         <View style={styles.cardInfo}>
           <View style={styles.statusContainer}>
             <View style={[styles.statusDot, { backgroundColor: isActive ? '#2D5A27' : '#9CA3AF' }]} />
