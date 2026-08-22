@@ -37,9 +37,10 @@ export function PropertyCard({ id, title, location, price, rating, description, 
         />
         
         {/* BOTÃO DE CORAÇÃO SOBRE A IMAGEM */}
-        <TouchableOpacity 
-          style={styles.heartButton} 
+        <TouchableOpacity
+          style={styles.heartButton}
           onPress={() => toggleFavorite(id)}
+          testID="favorite-button"
         >
           <Heart 
             size={24} 
