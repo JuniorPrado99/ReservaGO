@@ -66,13 +66,18 @@ export default function LoginScreen() {
       if (Platform.OS !== 'web' && data?.url) {
         console.log('[login] abrindo sessão de autenticação (WebBrowser) em', data.url);
 
-        // TESTE DE ISOLAMENTO TEMPORÁRIO — trocado openAuthSessionAsync por
-        // openBrowserAsync pra confirmar se o problema é específico da API
-        // ASWebAuthenticationSession do iOS. Reverter para openAuthSessionAsync
-        // depois do teste (é a chamada original, comentada abaixo).
-        // const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
-        const result = await WebBrowser.openBrowserAsync(data.url);
-        console.log('[login] [TESTE openBrowserAsync] resultado ->', result);
+        // (Teste de isolamento com openBrowserAsync feito e revertido — ele
+        // não intercepta o retorno do deep link por design, então não serve
+        // pra fechar o fluxo de OAuth. Confirmou que a falha é no redirect de
+        // volta para exp://.../--/oauth-callback, não na abertura da página.)
+        const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+        console.log('[login] openAuthSessionAsync retornou (completo) ->', JSON.stringify(result));
+
+        if (result.type === 'success') {
+          console.log('[login] [SUCCESS] url de retorno recebida ->', result.url);
+        } else {
+          console.log('[login] sessão de autenticação não retornou "success" -> type =', result.type);
+        }
       }
     } catch (err: any) {
       console.log('[login] erro no login com Google ->', err?.message ?? err);

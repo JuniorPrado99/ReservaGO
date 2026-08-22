@@ -210,8 +210,7 @@ Estes pontos devem ser considerados antes de qualquer nova implementação nesta
 7. **`npm test` não funciona**: não há script `test` no `package.json` nem a dependência `jest`/`jest-expo`. Além disso, `components/__tests__/StyledText-test.js` importa `../StyledText`, arquivo que não existe em `components/`.
 8. **`.env.example` não existe** no repositório, apesar do README instruir `cp .env.example .env`.
 9. **Reorganização de rotas em andamento e não commitada**: `git status` mostra `bookings.tsx`, `details.tsx`, `favorites.tsx`, `index.tsx`, `messages.tsx`, `profile.tsx` deletados na raiz e recriados/modificados dentro de `app/(tabs)/` (mais `app/details.tsx`) — provável migração de arquivos soltos para dentro de `app/`.
-
----
+10. **PKCE cai em `code_challenge_method=plain` em vez de `s256`** (warning no console: `WebCrypto API is not supported. Code challenge method will default to use plain instead of sha256.`). Causa exata, conferida em `node_modules/@supabase/auth-js/src/lib/helpers.ts` (`generatePKCEChallenge`): o SDK checa `typeof crypto.subtle !== 'undefined'` pra decidir entre `s256` e `plain`; o runtime do Hermes/React Native não expõe `crypto.subtle` (WebCrypto), então sempre cai em `plain`. **`react-native-get-random-values` não resolve** (só faz polyfill de `crypto.getRandomValues`, não de `crypto.subtle`). **`expo-crypto` sozinho também não resolve** — ele expõe uma API própria (`Crypto.digestStringAsync`), não um polyfill de `crypto.subtle`/`SubtleCrypto`; resolver de verdade exigiria uma lib que polyfille `crypto.subtle` (ex.: `react-native-quick-crypto`) ou um adapter manual ligando `expo-crypto` a `global.crypto.subtle`. **Não é bloqueante**: `plain` é um método válido do PKCE (RFC 7636) e o servidor do Supabase aceita — só é uma proteção mais fraca contra interceptação da URL de autorização do que `s256` seria.
 
 ## 9. REGRAS PERMANENTES para todas as sessões neste projeto
 
