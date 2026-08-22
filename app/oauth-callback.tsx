@@ -19,6 +19,12 @@ export default function OAuthCallback() {
   const handledRef = useRef(false);
 
   useEffect(() => {
+    console.log('[oauth-callback] tela montada');
+  }, []);
+
+  useEffect(() => {
+    console.log('[oauth-callback] url atual (useURL) ->', url);
+
     // Um código PKCE só pode ser trocado uma vez — evita reprocessar se este
     // efeito rodar de novo com a mesma URL.
     if (!url || handledRef.current) return;
@@ -26,12 +32,14 @@ export default function OAuthCallback() {
 
     (async () => {
       const { error } = await supabase.auth.exchangeCodeForSession(url);
+      console.log('[oauth-callback] exchangeCodeForSession ->', { error: error?.message ?? null });
 
       if (error) {
         setErrorMessage(error.message);
         return;
       }
 
+      console.log('[oauth-callback] sessão trocada com sucesso, redirecionando para /(tabs)');
       router.replace('/(tabs)');
     })();
   }, [url]);

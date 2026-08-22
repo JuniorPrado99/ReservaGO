@@ -72,6 +72,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Não cria nada aqui: a trigger handle_new_user (schema.sql) já garante
   // que o profile existe assim que o usuário é criado em auth.users.
   const loadProfileForSession = async (activeSession: Session) => {
+    console.log('[auth] carregando profile para usuário', activeSession.user.id);
     const { data: profile, error } = await supabase
       .from('profiles')
       .select('id, name, email, avatar_url, role')
@@ -79,6 +80,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .single();
 
     if (error || !profile) {
+      console.log('[auth] falha ao ler profile, usando fallback ->', error?.message);
       // Não deveria acontecer (a trigger roda antes disso), mas evita deixar
       // o usuário sem `user` populado se a leitura falhar por algum motivo.
       setUser({
@@ -88,6 +90,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         role: 'hospede',
         avatar: activeSession.user.user_metadata?.avatar_url ?? DEFAULT_AVATAR,
       });
+      console.log('[auth] user (fallback) definido no estado');
       return;
     }
 
@@ -98,12 +101,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       role: (profile.role as UserRole) ?? 'hospede',
       avatar: profile.avatar_url || DEFAULT_AVATAR,
     });
+    console.log('[auth] user definido no estado a partir do profile ->', profile.email, profile.role);
   };
 
   useEffect(() => {
     let isMounted = true;
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, newSession) => {
+      console.log('[auth] onAuthStateChange ->', event, '| sessão presente?', !!newSession);
       if (!isMounted) return;
       setSession(newSession);
 

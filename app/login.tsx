@@ -46,6 +46,8 @@ export default function LoginScreen() {
     setIsGoogleLoading(true);
     try {
       const redirectTo = Linking.createURL('oauth-callback');
+      console.log('[login] iniciando OAuth Google | redirectTo =', redirectTo, '| platform =', Platform.OS);
+
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
@@ -54,12 +56,20 @@ export default function LoginScreen() {
         },
       });
 
+      console.log('[login] resposta signInWithOAuth ->', {
+        url: data?.url ?? null,
+        error: error?.message ?? null,
+      });
+
       if (error) throw error;
 
       if (Platform.OS !== 'web' && data?.url) {
-        await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+        console.log('[login] abrindo sessão de autenticação (WebBrowser) em', data.url);
+        const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+        console.log('[login] openAuthSessionAsync retornou ->', result);
       }
     } catch (err: any) {
+      console.log('[login] erro no login com Google ->', err?.message ?? err);
       Alert.alert('Erro ao entrar com Google', err?.message ?? 'Tente novamente.');
     } finally {
       setIsGoogleLoading(false);
