@@ -65,8 +65,14 @@ export default function LoginScreen() {
 
       if (Platform.OS !== 'web' && data?.url) {
         console.log('[login] abrindo sessão de autenticação (WebBrowser) em', data.url);
-        const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
-        console.log('[login] openAuthSessionAsync retornou ->', result);
+
+        // TESTE DE ISOLAMENTO TEMPORÁRIO — trocado openAuthSessionAsync por
+        // openBrowserAsync pra confirmar se o problema é específico da API
+        // ASWebAuthenticationSession do iOS. Reverter para openAuthSessionAsync
+        // depois do teste (é a chamada original, comentada abaixo).
+        // const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+        const result = await WebBrowser.openBrowserAsync(data.url);
+        console.log('[login] [TESTE openBrowserAsync] resultado ->', result);
       }
     } catch (err: any) {
       console.log('[login] erro no login com Google ->', err?.message ?? err);

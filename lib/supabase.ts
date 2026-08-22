@@ -45,5 +45,13 @@ export const supabase = createClient(resolvedUrl, resolvedAnonKey, {
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false,
+    // O default do SDK é 'implicit' (ver node_modules/@supabase/supabase-js/
+    // src/lib/constants.ts). Sem isso explícito, signInWithOAuth gera uma URL
+    // de autorização SEM code_challenge/code_challenge_method, e o callback
+    // volta com o token no fragmento (#access_token=...) em vez de "?code=".
+    // Só que app/oauth-callback.tsx chama exchangeCodeForSession(url), que é
+    // específico do fluxo PKCE e espera "?code=" — com implicit, não há code
+    // nenhum pra trocar. Precisa ser 'pkce' pros dois lados baterem.
+    flowType: 'pkce',
   },
 });
