@@ -212,7 +212,59 @@ Estes pontos devem ser considerados antes de qualquer nova implementação nesta
 9. **Reorganização de rotas em andamento e não commitada**: `git status` mostra `bookings.tsx`, `details.tsx`, `favorites.tsx`, `index.tsx`, `messages.tsx`, `profile.tsx` deletados na raiz e recriados/modificados dentro de `app/(tabs)/` (mais `app/details.tsx`) — provável migração de arquivos soltos para dentro de `app/`.
 10. **PKCE cai em `code_challenge_method=plain` em vez de `s256`** (warning no console: `WebCrypto API is not supported. Code challenge method will default to use plain instead of sha256.`). Causa exata, conferida em `node_modules/@supabase/auth-js/src/lib/helpers.ts` (`generatePKCEChallenge`): o SDK checa `typeof crypto.subtle !== 'undefined'` pra decidir entre `s256` e `plain`; o runtime do Hermes/React Native não expõe `crypto.subtle` (WebCrypto), então sempre cai em `plain`. **`react-native-get-random-values` não resolve** (só faz polyfill de `crypto.getRandomValues`, não de `crypto.subtle`). **`expo-crypto` sozinho também não resolve** — ele expõe uma API própria (`Crypto.digestStringAsync`), não um polyfill de `crypto.subtle`/`SubtleCrypto`; resolver de verdade exigiria uma lib que polyfille `crypto.subtle` (ex.: `react-native-quick-crypto`) ou um adapter manual ligando `expo-crypto` a `global.crypto.subtle`. **Não é bloqueante**: `plain` é um método válido do PKCE (RFC 7636) e o servidor do Supabase aceita — só é uma proteção mais fraca contra interceptação da URL de autorização do que `s256` seria.
 
-## 9. REGRAS PERMANENTES para todas as sessões neste projeto
+---
+
+## 9. Development Build — por que o Expo Go não serve pro login com Google
+
+Investigado e confirmado na branch `feature/oauth-google`: o fluxo de login com Google via
+`WebBrowser.openAuthSessionAsync` abre a URL de autorização do Supabase normalmente e o Google
+autentica — mas o redirect de volta pra `exp://<ip>:8081/--/oauth-callback` falha, com o erro
+"Safari não pode abrir a página porque não pode se conectar ao servidor". Foi conferido e
+descartado: Supabase acessível, provider Google configurado corretamente, `reservago://oauth-callback`
+já cadastrado na allowlist de Redirect URLs, `flowType: 'pkce'` correto em `lib/supabase.ts`. A
+causa é uma limitação do próprio **Expo Go no iOS**: quem está registrado no sistema operacional
+pra receber esse deep link é o app Expo Go, não o ReservaGO — a `ASWebAuthenticationSession` do
+iOS não consegue devolver o controle pro app de forma confiável nesse cenário.
+
+**Solução: testar o login com Google num development build (`expo-dev-client`), não no Expo Go.**
+Com um dev build, o app roda com o scheme próprio (`reservago://`) registrado de verdade no
+sistema — o mesmo scheme que `app/login.tsx` já gera via `Linking.createURL('oauth-callback')`
+(isso não exige nenhuma mudança de código: em Expo Go resolve pra `exp://IP:8081/--/oauth-callback`,
+num dev build resolve direto pra `reservago://oauth-callback`).
+
+### ⚠️ iOS pendente — sem conta Apple Developer
+
+Não há conta Apple Developer Program (paga) neste projeto. Build de development/internal
+distribution pra iPhone físico exige registrar o UDID do aparelho, o que exige essa conta. Por
+isso o `eas.json` está configurado só com `android` nos profiles `development`/`preview` — **a
+validação do fluxo de OAuth vai ser feita em Android primeiro**. O build iOS (e a confirmação
+final de que o dev build resolve o bug relatado no iPhone do Junior) fica pendente até haver uma
+conta Apple Developer Program disponível.
+
+### Como gerar e instalar o dev build Android (PowerShell)
+
+```powershell
+# 1. Login na conta Expo/EAS (uma vez só, por máquina)
+npx eas-cli login
+
+# 2. Gerar o build de desenvolvimento (perfil "development" do eas.json, Android/.apk)
+npx eas-cli build --profile development --platform android
+
+# 3. Quando o build terminar, baixar e instalar o .apk pelo link/QR code que o EAS mostra
+
+# 4. Rodar o Metro apontando pro dev build (não pro Expo Go)
+npx expo start --dev-client --clear
+```
+
+### Checklist da allowlist do Supabase (Authentication → URL Configuration → Redirect URLs)
+
+- `reservago://oauth-callback` — necessário pro dev build / build de produção. **Já cadastrado.**
+- `exp://<IP-da-máquina>:8081/--/oauth-callback` — só serve pra testar o resto do app no Expo Go
+  (não o login Google). Muda toda vez que o IP da rede muda.
+
+---
+
+## 10. REGRAS PERMANENTES para todas as sessões neste projeto
 
 1. Nunca altere arquivos que eu não pedi explicitamente.
 2. Sempre me mostre o plano antes de escrever código.
