@@ -2,6 +2,7 @@ import type { Session } from '@supabase/supabase-js';
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Alert } from 'react-native';
 import { supabase } from '../lib/supabase';
+import { updateRole as updateRoleInDb } from '../services/profileService';
 
 export type UserRole = 'hospede' | 'anfitriao' | 'admin';
 
@@ -154,7 +155,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const updateRole = async (role: UserRole) => {
     if (!user) return;
-    setUser((prev) => (prev ? { ...prev, role } : null));
+
+    // Grava de verdade em profiles.role (antes só trocava em memória - ver
+    // CLAUDE.md, divergência sobre updateRole). Para os usuários estáticos
+    // de dev (STATIC_USERS, ids "static-*") não existe linha em profiles,
+    // então isso falha por design nesse caso específico - é esperado, esse
+    // login fake não passa de __DEV__ e nunca vai pra produção.
+    const { data, error } = await updateRoleInDb(user.id, role);
+
+    if (error) {
+      Alert.alert('Erro ao atualizar perfil', error);
+      return;
+    }
+
+    setUser((prev) => (prev ? { ...prev, role: data?.role ?? role } : null));
   };
 
   const deleteAccount = async () => {
