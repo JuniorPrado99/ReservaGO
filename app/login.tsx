@@ -1,8 +1,11 @@
 import { FontAwesome } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import * as Linking from 'expo-linking';
+import * as WebBrowser from 'expo-web-browser';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Platform,
   SafeAreaView,
@@ -13,6 +16,7 @@ import {
   View,
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
+import { supabase } from '../lib/supabase';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -20,6 +24,7 @@ export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -32,6 +37,33 @@ export default function LoginScreen() {
     setIsLoading(true);
     await login(email, password);
     setIsLoading(false);
+  };
+
+  // Abre o fluxo de OAuth do Google gerenciado pelo Supabase. A troca do
+  // código pela sessão (e o redirecionamento pra Explorar) acontece em
+  // app/oauth-callback.tsx, que recebe o deep link de volta.
+  const handleGoogleLogin = async () => {
+    setIsGoogleLoading(true);
+    try {
+      const redirectTo = Linking.createURL('oauth-callback');
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo,
+          skipBrowserRedirect: Platform.OS !== 'web',
+        },
+      });
+
+      if (error) throw error;
+
+      if (Platform.OS !== 'web' && data?.url) {
+        await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+      }
+    } catch (err: any) {
+      Alert.alert('Erro ao entrar com Google', err?.message ?? 'Tente novamente.');
+    } finally {
+      setIsGoogleLoading(false);
+    }
   };
 
   return (
@@ -49,43 +81,64 @@ export default function LoginScreen() {
           </View>
 
           <View style={styles.form}>
-            <TextInput
-              style={styles.input}
-              placeholder="E-mail"
-              placeholderTextColor="#9CA3AF"
-              value={email}
-              onChangeText={setEmail}
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType="email-address"
-              editable={!isLoading}
-            />
-            <TextInput
-              style={styles.input}
-              placeholder="Senha"
-              placeholderTextColor="#9CA3AF"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-              editable={!isLoading}
-            />
-
             <TouchableOpacity
-              style={[styles.loginButton, (!email || !password || isLoading) && styles.loginButtonDisabled]}
-              onPress={handleLogin}
-              disabled={!email || !password || isLoading}
+              style={[styles.googleButton, isGoogleLoading && styles.loginButtonDisabled]}
+              onPress={handleGoogleLogin}
+              disabled={isGoogleLoading}
             >
-              {isLoading ? (
-                <ActivityIndicator color="#fff" />
+              {isGoogleLoading ? (
+                <ActivityIndicator color="#1F2937" />
               ) : (
-                <Text style={styles.loginText}>Entrar</Text>
+                <>
+                  <FontAwesome name="google" size={18} color="#1F2937" style={{ marginRight: 10 }} />
+                  <Text style={styles.googleText}>Entrar com Google</Text>
+                </>
               )}
             </TouchableOpacity>
+
+            {__DEV__ && (
+              <>
+                <Text style={styles.devDivider}>— apenas em desenvolvimento —</Text>
+
+                <TextInput
+                  style={styles.input}
+                  placeholder="E-mail"
+                  placeholderTextColor="#9CA3AF"
+                  value={email}
+                  onChangeText={setEmail}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardType="email-address"
+                  editable={!isLoading}
+                />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Senha"
+                  placeholderTextColor="#9CA3AF"
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry
+                  editable={!isLoading}
+                />
+
+                <TouchableOpacity
+                  style={[styles.loginButton, (!email || !password || isLoading) && styles.loginButtonDisabled]}
+                  onPress={handleLogin}
+                  disabled={!email || !password || isLoading}
+                >
+                  {isLoading ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={styles.loginText}>Entrar (login fake)</Text>
+                  )}
+                </TouchableOpacity>
+              </>
+            )}
 
             <TouchableOpacity
               style={styles.backButton}
               onPress={() => router.back()}
-              disabled={isLoading}
+              disabled={isLoading || isGoogleLoading}
             >
               <Text style={styles.backText}>Voltar e explorar</Text>
             </TouchableOpacity>
@@ -104,6 +157,13 @@ const styles = StyleSheet.create({
   title: { fontSize: 28, fontWeight: 'bold', color: '#1F2937', marginTop: 20, textAlign: 'center' },
   subtitle: { fontSize: 16, color: '#6B7280', textAlign: 'center', marginTop: 10 },
   form: { gap: 15 },
+  googleButton: {
+    flexDirection: 'row', backgroundColor: '#fff', padding: 18, borderRadius: 15,
+    alignItems: 'center', justifyContent: 'center', minHeight: 58,
+    borderWidth: 1, borderColor: '#E5E7EB',
+  },
+  googleText: { fontSize: 16, fontWeight: 'bold', color: '#1F2937' },
+  devDivider: { textAlign: 'center', color: '#9CA3AF', fontSize: 12, marginTop: 5 },
   input: {
     borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 15,
     padding: 18, fontSize: 16, color: '#1F2937', backgroundColor: '#F9FAFB',
