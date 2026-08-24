@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase';
-import { NewReview, Review, ServiceResult, toResult } from './types';
+import { NewReview, Review, ReviewWithAuthor, ServiceResult, toResult } from './types';
 
 // Acesso à tabela `reviews` (supabase/schema.sql). O trigger
 // reviews_rating_trigger (linha 243) recalcula properties.rating/reviews_count
@@ -10,13 +10,14 @@ export async function createReview(dados: NewReview): Promise<ServiceResult<Revi
   return toResult(data, error);
 }
 
-export async function getReviewsByProperty(propertyId: string): Promise<ServiceResult<Review[]>> {
+/** Embute profiles(name, avatar_url) via a FK reviews.author_id -> profiles.id (única FK entre as duas, sem ambiguidade pro PostgREST). */
+export async function getReviewsByProperty(propertyId: string): Promise<ServiceResult<ReviewWithAuthor[]>> {
   const { data, error } = await supabase
     .from('reviews')
-    .select('*')
+    .select('*, profiles(name, avatar_url)')
     .eq('property_id', propertyId)
     .order('created_at', { ascending: false });
-  return toResult(data, error);
+  return toResult(data as unknown as ReviewWithAuthor[] | null, error);
 }
 
 /** UNIQUE(booking_id, author_id) em reviews (schema.sql linha 221) é a mesma regra checada aqui. */

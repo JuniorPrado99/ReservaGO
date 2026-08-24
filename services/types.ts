@@ -117,6 +117,11 @@ export interface Review {
 
 export type NewReview = Pick<Review, 'property_id' | 'booking_id' | 'author_id' | 'rating' | 'comment'>;
 
+/** Review + nome/avatar do autor, via embed de profiles(author_id -> id) no select do reviewService. */
+export interface ReviewWithAuthor extends Review {
+  profiles: { name: string; avatar_url: string | null } | null;
+}
+
 // ── conversations & messages ────────────────────────────────────────
 export interface Conversation {
   id: string;

@@ -12,8 +12,9 @@ import {
     Wifi,
     X,
 } from 'lucide-react-native';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
+    ActivityIndicator,
     Alert,
     Image,
     Linking,
@@ -28,6 +29,10 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { useBookings } from '../context/BookingContext';
 import { useFavorites } from '../context/FavoritesContext';
+import { checkAvailability, createBooking } from '../services/bookingService';
+import { getPropertyById } from '../services/propertyService';
+import { getReviewsByProperty } from '../services/reviewService';
+import type { Property as DbProperty, ReviewWithAuthor } from '../services/types';
 
 const ISOLATION_MAP: Record<string, { emoji: string; title: string; sub: string }> = {
   urbano: {
@@ -58,10 +63,20 @@ const DEFAULT_ISOLATION = {
   sub: 'O anfitrião não informou o nível de isolamento desta cabana.',
 };
 
-const REVIEWS = [
+// Usadas só quando a busca de reviews reais falha (query com erro) - não
+// quando a propriedade genuinamente não tem nenhuma review ainda (nesse
+// caso mostramos um estado vazio de verdade, não isso).
+const FALLBACK_REVIEWS = [
   { id: '1', author: 'Fernanda M.', avatar: 'https://i.pravatar.cc/100?img=1', rating: 5, date: 'Mar 2025', comment: 'Lugar incrível, silêncio total e natureza por todos os lados. Voltaremos com certeza!' },
   { id: '2', author: 'Rafael S.', avatar: 'https://i.pravatar.cc/100?img=3', rating: 5, date: 'Fev 2025', comment: 'Estrutura impecável, trilha privativa sensacional. Superou todas as expectativas.' },
 ];
+
+function toISODateString(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
 
 const AMENITIES = [
   { icon: Wifi, label: 'Wi-Fi de alta velocidade' },
@@ -79,6 +94,64 @@ export default function DetailsScreen() {
   const { id, title, price, location, description, image, isolationLevel } = useLocalSearchParams();
   const isFav = favorites.includes(id as string);
 
+  // Usuário estático (__DEV__) não existe em profiles/auth - nesse caso (e
+  // se a busca no banco falhar) o app continua no modo "só com os params",
+  // igual funcionava antes desta tarefa.
+  const isStaticUser = !!user?.id && user.id.startsWith('static-');
+
+  const [property, setProperty] = useState<DbProperty | null>(null);
+  const [loadingProperty, setLoadingProperty] = useState(true);
+  const [reviews, setReviews] = useState<ReviewWithAuthor[]>([]);
+  const [loadingReviews, setLoadingReviews] = useState(true);
+  const [reviewsFailed, setReviewsFailed] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+
+  useEffect(() => {
+    if (!id) {
+      setLoadingProperty(false);
+      setLoadingReviews(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    getPropertyById(id as string).then(({ data, error }) => {
+      if (cancelled) return;
+      if (error || !data) {
+        console.log('[details] getPropertyById falhou, mantendo dados dos params ->', error);
+        setProperty(null);
+      } else {
+        setProperty(data);
+      }
+      setLoadingProperty(false);
+    });
+
+    getReviewsByProperty(id as string).then(({ data, error }) => {
+      if (cancelled) return;
+      if (error) {
+        console.log('[details] getReviewsByProperty falhou, usando fallback ->', error);
+        setReviewsFailed(true);
+        setReviews([]);
+      } else {
+        setReviews(data ?? []);
+      }
+      setLoadingReviews(false);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
+  // Enquanto a busca real não termina (ou se ela falhar), os params da
+  // navegação seguem valendo - é o que já dava o carregamento instantâneo
+  // antes desta tarefa, então preservamos exatamente esse comportamento.
+  const displayTitle = property?.title ?? (title as string);
+  const displayLocation = property?.location ?? (location as string);
+  const displayDescription = property?.description ?? (description as string);
+  const displayImage = property?.images?.[0] ?? (image as string);
+  const displayIsolationLevel = property?.isolation_level ?? (isolationLevel as string);
+
   const [modalVisible, setModalVisible] = useState(false);
   const [step, setStep] = useState<'dates' | 'payment'>('dates');
   const [checkInDate, setCheckInDate] = useState<Date | null>(null);
@@ -87,7 +160,12 @@ export default function DetailsScreen() {
   const [selectingDate, setSelectingDate] = useState<'checkIn' | 'checkOut'>('checkIn');
   const [payMethod, setPayMethod] = useState<'pix' | 'card'>('pix');
 
-  const priceNum = Number(price) || 0;
+  const priceNum = property?.price ?? (Number(price) || 0);
+
+  // Só dá pra reservar de verdade (checkAvailability + createBooking) se a
+  // propriedade veio mesmo do banco (id real, existe em properties) e o
+  // usuário não é o de dev. Fora isso, cai no addBooking local de sempre.
+  const canBookOnline = !!property && !isStaticUser;
 
   const nightCount = useMemo(() => {
     if (checkInDate && checkOutDate) {
@@ -117,7 +195,7 @@ export default function DetailsScreen() {
     setModalVisible(true);
   };
 
-  const confirmBooking = () => {
+  const finishBookingLocally = () => {
     addBooking(id as string, {
       checkIn: checkInDate,
       checkOut: checkOutDate,
@@ -131,13 +209,72 @@ export default function DetailsScreen() {
     ]);
   };
 
+  const confirmBooking = async () => {
+    if (!canBookOnline || !checkInDate || !checkOutDate) {
+      // usuário estático, ou propriedade não veio do banco (id local tipo
+      // "p1") - mesmo comportamento de sempre, via BookingContext/AsyncStorage.
+      finishBookingLocally();
+      return;
+    }
+
+    setConfirming(true);
+    const checkInStr = toISODateString(checkInDate);
+    const checkOutStr = toISODateString(checkOutDate);
+
+    const { data: available, error: availError } = await checkAvailability(
+      property!.id,
+      checkInStr,
+      checkOutStr
+    );
+
+    if (availError) {
+      setConfirming(false);
+      Alert.alert('Erro', 'Não foi possível verificar a disponibilidade agora. Tente novamente.');
+      return;
+    }
+
+    if (!available) {
+      setConfirming(false);
+      Alert.alert(
+        'Datas indisponíveis',
+        'Essa cabana já está reservada nesse período. Escolha outras datas.'
+      );
+      return;
+    }
+
+    const finalTotal = payMethod === 'pix' ? total * 0.95 : total;
+
+    const { data: booking, error: createError } = await createBooking({
+      property_id: property!.id,
+      guest_id: user!.id,
+      check_in: checkInStr,
+      check_out: checkOutStr,
+      pay_method: payMethod,
+      price_per_night: priceNum,
+      total: finalTotal,
+      pix_discount: payMethod === 'pix',
+    });
+
+    setConfirming(false);
+
+    if (createError || !booking) {
+      Alert.alert('Erro ao reservar', createError ?? 'Tente novamente.');
+      return;
+    }
+
+    setModalVisible(false);
+    Alert.alert('Reserva Confirmada! 🌿', 'Sua viagem foi registrada com sucesso.', [
+      { text: 'Ver viagens', onPress: () => router.replace('/(tabs)/bookings') },
+    ]);
+  };
+
   const formatDate = (date: Date | null) => {
     if (!date) return 'Selecionar';
     return `${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')}`;
   };
 
   const openMap = () => {
-    const query = encodeURIComponent(location as string);
+    const query = encodeURIComponent(displayLocation);
     const url = Platform.OS === 'ios'
       ? `maps://?q=${query}`
       : `geo:0,0?q=${query}`;
@@ -208,13 +345,19 @@ export default function DetailsScreen() {
     return days;
   };
 
-  const isolationInfo = ISOLATION_MAP[String(isolationLevel).toLowerCase()] ?? DEFAULT_ISOLATION;
+  const isolationInfo = ISOLATION_MAP[String(displayIsolationLevel).toLowerCase()] ?? DEFAULT_ISOLATION;
+  const amenitiesFromDb = property?.amenities ?? [];
+  const reviewsCountLabel = loadingReviews
+    ? '···'
+    : reviewsFailed
+      ? FALLBACK_REVIEWS.length
+      : reviews.length;
 
   return (
     <View style={styles.container}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
         <View style={styles.imageHeader}>
-          <Image source={{ uri: image as string }} style={styles.mainImage} />
+          <Image source={{ uri: displayImage }} style={styles.mainImage} />
           <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
             <ChevronLeft color="#000" size={24} />
           </TouchableOpacity>
@@ -224,21 +367,22 @@ export default function DetailsScreen() {
         </View>
 
         <View style={styles.content}>
-          <Text style={styles.title}>{title}</Text>
+          {loadingProperty && <ActivityIndicator color="#2D5A27" style={{ marginBottom: 10 }} />}
+          <Text style={styles.title}>{displayTitle}</Text>
           <View style={styles.row}>
             <MapPin size={14} color="#6B7280" />
-            <Text style={styles.locationText}> {location}</Text>
+            <Text style={styles.locationText}> {displayLocation}</Text>
           </View>
           <TouchableOpacity style={styles.ratingRow}>
             <Star size={16} color="#F59E0B" fill="#F59E0B" />
-            <Text style={styles.ratingValue}> 4,98</Text>
-            <Text style={styles.ratingCount}> · {REVIEWS.length} avaliações</Text>
+            <Text style={styles.ratingValue}> {(property?.rating ?? 0).toFixed(2).replace('.', ',')}</Text>
+            <Text style={styles.ratingCount}> · {reviewsCountLabel} avaliações</Text>
             <ChevronRight size={14} color="#9CA3AF" style={{ marginLeft: 4 }} />
           </TouchableOpacity>
 
           <View style={styles.divider} />
           <Text style={styles.sectionTitle}>Sobre o lugar</Text>
-          <Text style={styles.bodyText}>{description || 'Um refúgio único rodeado pela natureza.'}</Text>
+          <Text style={styles.bodyText}>{displayDescription || 'Um refúgio único rodeado pela natureza.'}</Text>
 
           <View style={styles.divider} />
           <Text style={styles.sectionTitle}>🌿 Nível de isolamento</Text>
@@ -253,12 +397,19 @@ export default function DetailsScreen() {
           <View style={styles.divider} />
           <Text style={styles.sectionTitle}>Comodidades</Text>
           <View style={styles.amenitiesGrid}>
-            {AMENITIES.map((a, i) => (
-              <View key={i} style={styles.amenityItem}>
-                <a.icon size={22} color="#2D5A27" />
-                <Text style={styles.amenityLabel}>{a.label}</Text>
-              </View>
-            ))}
+            {amenitiesFromDb.length > 0
+              ? amenitiesFromDb.map((label, i) => (
+                  <View key={i} style={styles.amenityItem}>
+                    <Check size={22} color="#2D5A27" />
+                    <Text style={styles.amenityLabel}>{label}</Text>
+                  </View>
+                ))
+              : AMENITIES.map((a, i) => (
+                  <View key={i} style={styles.amenityItem}>
+                    <a.icon size={22} color="#2D5A27" />
+                    <Text style={styles.amenityLabel}>{a.label}</Text>
+                  </View>
+                ))}
           </View>
 
           <View style={styles.divider} />
@@ -266,29 +417,58 @@ export default function DetailsScreen() {
           <TouchableOpacity style={styles.mapPlaceholder} onPress={openMap} activeOpacity={0.8}>
             <View style={styles.mapOverlay}>
               <MapPin size={20} color="#fff" />
-              <Text style={styles.mapText}>Ver no mapa · {location}</Text>
+              <Text style={styles.mapText}>Ver no mapa · {displayLocation}</Text>
             </View>
           </TouchableOpacity>
 
           <View style={styles.divider} />
           <Text style={styles.sectionTitle}>Avaliações</Text>
-          {REVIEWS.map((r) => (
-            <View key={r.id} style={styles.reviewCard}>
-              <Image source={{ uri: r.avatar }} style={styles.reviewAvatar} />
-              <View style={{ flex: 1 }}>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                  <Text style={styles.reviewAuthor}>{r.author}</Text>
-                  <Text style={styles.reviewDate}>{r.date}</Text>
+          {loadingReviews ? (
+            <ActivityIndicator color="#2D5A27" />
+          ) : !reviewsFailed && reviews.length === 0 ? (
+            <Text style={styles.bodyText}>Ainda não há avaliações para esta cabana.</Text>
+          ) : reviewsFailed ? (
+            FALLBACK_REVIEWS.map((r) => (
+              <View key={r.id} style={styles.reviewCard}>
+                <Image source={{ uri: r.avatar }} style={styles.reviewAvatar} />
+                <View style={{ flex: 1 }}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                    <Text style={styles.reviewAuthor}>{r.author}</Text>
+                    <Text style={styles.reviewDate}>{r.date}</Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', marginVertical: 4 }}>
+                    {[...Array(r.rating)].map((_, i) => (
+                      <Star key={i} size={12} color="#F59E0B" fill="#F59E0B" />
+                    ))}
+                  </View>
+                  <Text style={styles.reviewComment}>{r.comment}</Text>
                 </View>
-                <View style={{ flexDirection: 'row', marginVertical: 4 }}>
-                  {[...Array(r.rating)].map((_, i) => (
-                    <Star key={i} size={12} color="#F59E0B" fill="#F59E0B" />
-                  ))}
-                </View>
-                <Text style={styles.reviewComment}>{r.comment}</Text>
               </View>
-            </View>
-          ))}
+            ))
+          ) : (
+            reviews.map((r) => (
+              <View key={r.id} style={styles.reviewCard}>
+                <Image
+                  source={{ uri: r.profiles?.avatar_url ?? 'https://i.pravatar.cc/100' }}
+                  style={styles.reviewAvatar}
+                />
+                <View style={{ flex: 1 }}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                    <Text style={styles.reviewAuthor}>{r.profiles?.name || 'Hóspede'}</Text>
+                    <Text style={styles.reviewDate}>
+                      {new Date(r.created_at).toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' })}
+                    </Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', marginVertical: 4 }}>
+                    {[...Array(r.rating)].map((_, i) => (
+                      <Star key={i} size={12} color="#F59E0B" fill="#F59E0B" />
+                    ))}
+                  </View>
+                  <Text style={styles.reviewComment}>{r.comment}</Text>
+                </View>
+              </View>
+            ))
+          )}
 
           <View style={styles.divider} />
           <Text style={styles.sectionTitle}>Anfitrião</Text>
@@ -323,7 +503,7 @@ export default function DetailsScreen() {
 
       <View style={styles.footer}>
         <View>
-          <Text style={styles.footerPrice}>R$ {price}</Text>
+          <Text style={styles.footerPrice}>R$ {priceNum}</Text>
           <Text style={styles.footerNight}>por noite</Text>
         </View>
         <TouchableOpacity style={styles.reserveButton} onPress={openReserveFlow}>
@@ -418,8 +598,16 @@ export default function DetailsScreen() {
                   <Text style={{ fontWeight: 'bold' }}>Cartão de Crédito</Text>
                   {payMethod === 'card' && <Check size={20} color="#2D5A27" />}
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.advanceBtn} onPress={confirmBooking}>
-                  <Text style={styles.advanceBtnText}>Confirmar Pagamento</Text>
+                <TouchableOpacity
+                  style={[styles.advanceBtn, confirming && { opacity: 0.6 }]}
+                  onPress={confirmBooking}
+                  disabled={confirming}
+                >
+                  {confirming ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={styles.advanceBtnText}>Confirmar Pagamento</Text>
+                  )}
                 </TouchableOpacity>
               </View>
             )}
