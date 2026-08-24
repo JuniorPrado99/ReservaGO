@@ -58,7 +58,6 @@ function RootLayoutNav() {
         <Stack.Screen name="select-role" options={{ headerShown: false }} />
         <Stack.Screen name="create-listing" options={{ title: 'Anunciar Cabana', headerShown: true, headerTitleStyle: { fontWeight: 'bold' }, headerTintColor: '#2D5A27' }} />
         <Stack.Screen name="details" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
         <Stack.Screen name="admin-dashboard" options={{ headerShown: false }} />
         {/* ✅ Nova rota de notificações */}
         <Stack.Screen name="notifications" options={{ headerShown: false }} />
