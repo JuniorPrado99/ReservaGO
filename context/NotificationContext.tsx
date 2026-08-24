@@ -1,4 +1,13 @@
-import React, { createContext, useState, useContext, useCallback } from 'react';
+import React, { createContext, useState, useContext, useCallback, useEffect } from 'react';
+import { useAuth } from './AuthContext';
+import {
+  getNotifications,
+  getUnreadCount,
+  markAllAsRead as markAllAsReadRemote,
+  markAsRead as markAsReadRemote,
+  subscribeToNotifications,
+} from '../services/notificationService';
+import type { AppNotification as DbNotification } from '../services/types';
 
 type NotificationType = 'reserva' | 'mensagem' | 'promocao' | 'aviso';
 
@@ -19,6 +28,8 @@ interface NotificationContextData {
   addNotification: (n: Omit<AppNotification, 'id' | 'read'>) => void;
 }
 
+// Usado só como fallback local (usuário estático de dev, ou quando o
+// Supabase falha) - pra tela de notificações nunca ficar em branco.
 const INITIAL_NOTIFICATIONS: AppNotification[] = [
   {
     id: '1',
@@ -86,6 +97,31 @@ const INITIAL_NOTIFICATIONS: AppNotification[] = [
   },
 ];
 
+function formatRelativeTime(iso: string): string {
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const minutes = Math.floor(diffMs / 60000);
+  if (minutes < 1) return 'Agora';
+  if (minutes < 60) return `${minutes} min atrás`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} hora${hours > 1 ? 's' : ''} atrás`;
+  const days = Math.floor(hours / 24);
+  if (days === 1) return 'Ontem';
+  if (days < 7) return `${days} dias atrás`;
+  const weeks = Math.floor(days / 7);
+  return `${weeks} semana${weeks > 1 ? 's' : ''} atrás`;
+}
+
+function mapNotification(n: DbNotification): AppNotification {
+  return {
+    id: n.id,
+    type: n.type,
+    title: n.title,
+    body: n.body,
+    time: formatRelativeTime(n.created_at),
+    read: n.read,
+  };
+}
+
 const NotificationContext = createContext<NotificationContextData>({
   notifications: [],
   unreadCount: 0,
@@ -95,20 +131,85 @@ const NotificationContext = createContext<NotificationContextData>({
 });
 
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
   const [notifications, setNotifications] = useState<AppNotification[]>(INITIAL_NOTIFICATIONS);
+  const [remoteUnreadCount, setRemoteUnreadCount] = useState<number | null>(null);
 
-  const unreadCount = notifications.filter(n => !n.read).length;
+  // Usuário estático (__DEV__) não existe em profiles/auth - fica só no
+  // mock local, como sempre funcionou.
+  const isStaticUser = !!user?.id && user.id.startsWith('static-');
+  const isConnected = !!user?.id && !isStaticUser;
+
+  const refreshUnreadCount = useCallback((userId: string) => {
+    getUnreadCount(userId).then(({ data, error }) => {
+      if (error) {
+        console.log('[notifications] getUnreadCount falhou ->', error);
+        return;
+      }
+      setRemoteUnreadCount(data ?? 0);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!isConnected || !user?.id) {
+      setRemoteUnreadCount(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    getNotifications(user.id).then(({ data, error }) => {
+      if (cancelled) return;
+      if (error || !data) {
+        console.log('[notifications] getNotifications falhou, mantendo mock local ->', error);
+        return;
+      }
+      setNotifications(data.map(mapNotification));
+    });
+
+    refreshUnreadCount(user.id);
+
+    // Realtime: nova notificação chega na hora, sem precisar recarregar a tela.
+    const unsubscribe = subscribeToNotifications(user.id, (n) => {
+      setNotifications((prev) => [mapNotification(n), ...prev]);
+      refreshUnreadCount(user.id);
+    });
+
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [isConnected, user?.id, refreshUnreadCount]);
+
+  const unreadCount = isConnected && remoteUnreadCount !== null
+    ? remoteUnreadCount
+    : notifications.filter((n) => !n.read).length;
 
   const markAsRead = useCallback((id: string) => {
-    setNotifications(prev =>
-      prev.map(n => n.id === id ? { ...n, read: true } : n)
-    );
-  }, []);
+    setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+
+    if (isConnected) {
+      markAsReadRemote(id).then(({ error }) => {
+        if (error) console.log('[notifications] markAsRead falhou ->', error);
+        else if (user?.id) refreshUnreadCount(user.id);
+      });
+    }
+  }, [isConnected, user?.id, refreshUnreadCount]);
 
   const markAllAsRead = useCallback(() => {
     setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-  }, []);
 
+    if (isConnected && user?.id) {
+      markAllAsReadRemote(user.id).then(({ error }) => {
+        if (error) console.log('[notifications] markAllAsRead falhou ->', error);
+        else setRemoteUnreadCount(0);
+      });
+    }
+  }, [isConnected, user?.id]);
+
+  // Não conectado a nada real de propósito - notificações reais são criadas
+  // por triggers do banco (notify_host_on_booking, notify_on_message,
+  // notify_admins_on_report), nunca diretamente pelo client.
   const addNotification = useCallback((n: Omit<AppNotification, 'id' | 'read'>) => {
     const newN: AppNotification = {
       ...n,
