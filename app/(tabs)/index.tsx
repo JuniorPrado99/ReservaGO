@@ -7,8 +7,9 @@ import {
   Waves,
   X,
 } from 'lucide-react-native';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   BackHandler,
   FlatList,
   Keyboard, Modal,
@@ -19,7 +20,32 @@ import {
   View,
 } from 'react-native';
 import { PropertyCard } from '../../components/PropertyCard';
+import { useAuth } from '../../context/AuthContext';
 import { Listing, useListings } from '../../context/ListingContext';
+import { getProperties } from '../../services/propertyService';
+import type { Property as DbProperty } from '../../services/types';
+
+// Converte a linha do Supabase (snake_case) pro formato Listing que a tela
+// já usa (camelCase) - assim os filtros/seções abaixo não mudam de lógica.
+// (Renomeado pra DbProperty porque a tela já tem seu próprio `type Property
+// = Listing` mais abaixo, usado nos filtros locais.)
+function mapPropertyToListing(p: DbProperty): Listing {
+  return {
+    id: p.id,
+    title: p.title,
+    location: p.location,
+    price: p.price,
+    description: p.description,
+    image: p.images?.[0] ?? null,
+    isolationLevel: p.isolation_level,
+    createdAt: p.created_at,
+    bookingsCount: p.bookings_count,
+    rating: p.rating,
+    category: p.category,
+    subCategory: p.sub_category ?? undefined,
+    hostId: p.owner_id,
+  };
+}
 
 const CATEGORIES = [
   { id: '1', name: 'Praia Privativa', icon: Waves },
@@ -67,7 +93,49 @@ type IsolationOption = (typeof ISOLATION_OPTIONS)[number];
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { allProperties = [] } = useListings() || {};
+  const { user } = useAuth();
+  const { allProperties: localProperties = [] } = useListings() || {};
+
+  // Usuário estático (__DEV__, ids "static-*") não existe em profiles/auth -
+  // nesse caso (e se a query falhar por qualquer outro motivo) caímos pros
+  // dados locais do ListingContext, pra não deixar a Explorar em branco.
+  const isStaticUser = !!user?.id && user.id.startsWith('static-');
+  const [remoteProperties, setRemoteProperties] = useState<Listing[] | null>(null);
+  const [loadingProperties, setLoadingProperties] = useState(!isStaticUser);
+
+  useEffect(() => {
+    if (isStaticUser) {
+      setRemoteProperties(null);
+      setLoadingProperties(false);
+      return;
+    }
+
+    let cancelled = false;
+    setLoadingProperties(true);
+
+    getProperties()
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (error || !data) {
+          console.log('[index] getProperties falhou, usando fallback local ->', error);
+          setRemoteProperties(null);
+        } else {
+          setRemoteProperties(data.map(mapPropertyToListing));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingProperties(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isStaticUser]);
+
+  const allProperties = useMemo(
+    () => remoteProperties ?? localProperties,
+    [remoteProperties, localProperties]
+  );
 
   const [selectedCategory, setSelectedCategory] = useState('Praia Privativa');
   const [searchQuery, setSearchQuery] = useState('');
@@ -143,19 +211,24 @@ export default function HomeScreen() {
     });
   };
 
-  const searchResults = applyActiveFilters(
-    allProperties.filter((item) => {
-      if (!searchQuery.trim()) return false;
-      const query = searchQuery.toLowerCase().trim();
-      return (
-        item.title?.toLowerCase().includes(query) ||
-        item.location?.toLowerCase().includes(query)
-      );
-    })
+  const searchResults = useMemo(
+    () =>
+      applyActiveFilters(
+        allProperties.filter((item) => {
+          if (!searchQuery.trim()) return false;
+          const query = searchQuery.toLowerCase().trim();
+          return (
+            item.title?.toLowerCase().includes(query) ||
+            item.location?.toLowerCase().includes(query)
+          );
+        })
+      ),
+    [allProperties, searchQuery, selectedPriceRange, selectedIsolation]
   );
 
-  const exploreAllResults = applyActiveFilters(
-    allProperties.filter((item) => item.category === selectedCategory)
+  const exploreAllResults = useMemo(
+    () => applyActiveFilters(allProperties.filter((item) => item.category === selectedCategory)),
+    [allProperties, selectedCategory, selectedPriceRange, selectedIsolation]
   );
 
   const renderSection = (title: string, subCategoryName: string) => {
@@ -343,6 +416,14 @@ export default function HomeScreen() {
               )}
             />
           )}
+        </View>
+      ) : loadingProperties ? (
+        <View style={styles.searchHint}>
+          <ActivityIndicator size="large" color="#2D5A27" />
+        </View>
+      ) : allProperties.length === 0 ? (
+        <View style={styles.searchHint}>
+          <Text style={styles.searchHintText}>Nenhuma cabana disponível no momento.</Text>
         </View>
       ) : (
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
