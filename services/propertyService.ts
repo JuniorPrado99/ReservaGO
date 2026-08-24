@@ -43,6 +43,41 @@ export async function createProperty(dados: NewProperty): Promise<ServiceResult<
   return toResult(data, error);
 }
 
+export type UpdatableProperty = Partial<
+  Pick<
+    Property,
+    'title' | 'description' | 'location' | 'price' | 'isolation_level' | 'category' | 'sub_category' | 'images' | 'amenities'
+  >
+>;
+
+/** Edição pelo próprio anfitrião - não deixa mexer em owner_id/status/rating/etc por aqui (fora do escopo de "editar meu anúncio"). */
+export async function updateProperty(id: string, dados: UpdatableProperty): Promise<ServiceResult<Property>> {
+  const { data, error } = await supabase.from('properties').update(dados).eq('id', id).select().single();
+  return toResult(data, error);
+}
+
+/**
+ * "Excluir" um anúncio é soft delete: grava status='inativo' em vez de
+ * fazer um DELETE de verdade na linha. Motivo: bookings.property_id e
+ * reviews.property_id têm ON DELETE CASCADE (supabase/schema.sql) - um
+ * DELETE real apagaria pra sempre o histórico de reservas e avaliações de
+ * hóspedes que já ficaram na cabana, mesmo sendo o próprio anfitrião quem
+ * pediu a exclusão. 'inativo' já existe no enum cabin_status e tira a
+ * cabana do explorar (properties_public_read só mostra status='ativo'),
+ * sem destruir nada. Fica sobreposto com o "reprovado" de approveProperty
+ * (mesmo valor 'inativo' pros dois casos) porque o enum não tem um estado
+ * dedicado de "removido pelo dono" - registrado como limitação conhecida.
+ */
+export async function deleteProperty(id: string): Promise<ServiceResult<Property>> {
+  const { data, error } = await supabase
+    .from('properties')
+    .update({ status: 'inativo' })
+    .eq('id', id)
+    .select()
+    .single();
+  return toResult(data, error);
+}
+
 /**
  * Envia a imagem (uri local do expo-image-picker) pro bucket "properties"
  * do Storage (schema.sql, público) e devolve a URL pública. RN/Expo: lê o

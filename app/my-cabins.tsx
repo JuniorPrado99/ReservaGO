@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { Listing, useListings } from '../context/ListingContext';
-import { getPropertiesByHost } from '../services/propertyService';
+import { deleteProperty, getPropertiesByHost } from '../services/propertyService';
 import type { CabinStatus, Property as DbProperty } from '../services/types';
 
 type CabinRow = Listing & { status?: CabinStatus };
@@ -46,18 +46,15 @@ export default function MyCabinsScreen() {
   const [remoteCabins, setRemoteCabins] = useState<CabinRow[] | null>(null);
   const [loading, setLoading] = useState(!isStaticUser);
 
-  useEffect(() => {
+  const loadCabins = () => {
     if (isStaticUser || !user?.id) {
       setRemoteCabins(null);
       setLoading(false);
       return;
     }
 
-    let cancelled = false;
     setLoading(true);
-
     getPropertiesByHost(user.id).then(({ data, error }) => {
-      if (cancelled) return;
       if (error || !data) {
         console.log('[my-cabins] getPropertiesByHost falhou, usando fallback local ->', error);
         setRemoteCabins(null);
@@ -66,10 +63,11 @@ export default function MyCabinsScreen() {
       }
       setLoading(false);
     });
+  };
 
-    return () => {
-      cancelled = true;
-    };
+  useEffect(() => {
+    loadCabins();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isStaticUser, user?.id]);
 
   const usingRemote = remoteCabins !== null;
@@ -79,14 +77,46 @@ export default function MyCabinsScreen() {
   const totalBookings = listings.reduce((acc, c) => acc + (c.bookingsCount || 0), 0);
 
   const handleDelete = (id: string, title: string) => {
-    if (usingRemote) {
-      Alert.alert('Em breve', 'Editar ou excluir anúncios já publicados no banco ainda não está disponível por aqui.');
-      return;
-    }
     Alert.alert('Excluir Anúncio', `Tem certeza que deseja remover "${title}"?`, [
       { text: 'Cancelar', style: 'cancel' },
-      { text: 'Excluir', style: 'destructive', onPress: () => removeListing(id) },
+      {
+        text: 'Excluir',
+        style: 'destructive',
+        onPress: async () => {
+          if (usingRemote) {
+            // Soft delete (status='inativo') - ver comentário em
+            // services/propertyService.ts (deleteProperty) sobre o porquê
+            // de não ser um DELETE de verdade.
+            const { error } = await deleteProperty(id);
+            if (error) {
+              Alert.alert('Erro', 'Não foi possível excluir agora. Tente novamente.');
+              return;
+            }
+            loadCabins();
+          } else {
+            removeListing(id);
+          }
+        },
+      },
     ]);
+  };
+
+  const handleEdit = (cabin: CabinRow) => {
+    router.push({
+      pathname: '/create-listing',
+      params: {
+        editId: cabin.id,
+        editIsRemote: usingRemote ? '1' : '0',
+        title: cabin.title,
+        location: cabin.location,
+        price: String(cabin.price ?? ''),
+        description: cabin.description,
+        image: cabin.image ?? '',
+        isolationLevel: cabin.isolationLevel ?? '',
+        category: cabin.category ?? '',
+        subCategory: cabin.subCategory ?? '',
+      },
+    });
   };
 
   return (
@@ -164,7 +194,7 @@ export default function MyCabinsScreen() {
             </View>
 
             <View style={styles.actionButtons}>
-              <TouchableOpacity style={styles.actionBtn}>
+              <TouchableOpacity style={styles.actionBtn} onPress={() => handleEdit(cabin)}>
                 <Edit size={18} color="#4B5563" />
               </TouchableOpacity>
               <TouchableOpacity style={styles.actionBtn} onPress={() => handleDelete(cabin.id, cabin.title)}>
