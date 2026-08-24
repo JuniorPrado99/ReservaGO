@@ -1,10 +1,13 @@
 import React from 'react';
+import { Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock')
 );
+
+jest.spyOn(Alert, 'alert').mockImplementation(() => {});
 
 // BookingContext só depende de useAuth() (não importa supabase diretamente),
 // então isolamos o teste mockando o hook em vez de subir um AuthProvider real.
@@ -48,11 +51,40 @@ describe('BookingContext', () => {
     });
   });
 
-  // NÃO IMPLEMENTADO NO CÓDIGO ATUAL: addBooking (context/BookingContext.tsx)
-  // não valida checkIn/checkOut entre si - aceita qualquer combinação de datas
-  // sem rejeitar check_out <= check_in. Marcado como .todo pra não fingir que
-  // existe uma validação que não existe; ver relatório final da Tarefa 3.
-  it.todo('rejeita reserva com check_out <= check_in (requer validação ainda não implementada em BookingContext.addBooking)');
+  it('rejeita reserva com check_out <= check_in e não adiciona nada à lista', async () => {
+    const { result } = renderHook(() => useBookings(), { wrapper });
+    await waitFor(() => expect(AsyncStorage.getItem).toHaveBeenCalled());
+
+    const mesmoDia = new Date('2026-09-10');
+
+    act(() => {
+      result.current.addBooking('property-5', {
+        checkIn: mesmoDia,
+        checkOut: mesmoDia, // check_out == check_in - inválido (banco exige check_out > check_in)
+        nights: 0,
+        payMethod: 'card',
+        total: 100,
+      });
+    });
+
+    expect(result.current.bookings).toHaveLength(0);
+    expect(Alert.alert).toHaveBeenCalledWith(
+      'Datas inválidas',
+      'A data de check-out precisa ser depois da data de check-in.'
+    );
+
+    act(() => {
+      result.current.addBooking('property-5', {
+        checkIn: new Date('2026-09-10'),
+        checkOut: new Date('2026-09-05'), // check_out antes do check_in
+        nights: -5,
+        payMethod: 'card',
+        total: 100,
+      });
+    });
+
+    expect(result.current.bookings).toHaveLength(0);
+  });
 
   it('persiste o total já com desconto Pix (o cálculo do desconto em si é feito por quem chama, em app/details.tsx)', async () => {
     const { result } = renderHook(() => useBookings(), { wrapper });
