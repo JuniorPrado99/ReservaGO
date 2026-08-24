@@ -18,33 +18,38 @@ ReservaGO/
 │   ├── (tabs)/                   # Grupo de rotas da tab bar inferior
 │   │   ├── _layout.tsx           # Configuração das 5 abas
 │   │   ├── index.tsx             # Aba "Explorar" — busca, filtros, carrosséis (Supabase)
-│   │   ├── favorites.tsx         # Aba "Favoritos" (ainda local/AsyncStorage)
+│   │   ├── favorites.tsx         # Aba "Favoritos" (Supabase + cache AsyncStorage)
 │   │   ├── bookings.tsx          # Aba "Viagens" — reservas reais + locais (Supabase + fallback)
-│   │   ├── messages.tsx          # Aba "Mensagens" (ainda mock local)
-│   │   └── profile.tsx           # Aba "Perfil"
+│   │   ├── messages.tsx          # Aba "Mensagens" (Supabase + Realtime)
+│   │   └── profile.tsx           # Aba "Perfil" (edição ainda local - RF-008 não conectado)
 │   ├── oauth-callback.tsx        # Callback do fluxo de login com Google (Supabase Auth, PKCE)
 │   ├── login.tsx                 # Login (Google real + fallback estático em __DEV__)
 │   ├── select-role.tsx           # Escolha hóspede/anfitrião (grava via RPC set_own_role)
 │   ├── details.tsx               # Detalhes da cabana + fluxo de reserva (Supabase)
 │   ├── review.tsx                # Avaliar uma estadia concluída (Supabase)
-│   ├── create-listing.tsx        # Cadastro de cabana pelo anfitrião (Supabase + upload de imagem)
-│   ├── my-cabins.tsx             # Painel do anfitrião — lista + status de aprovação (Supabase)
+│   ├── create-listing.tsx        # Cadastro E edição de cabana pelo anfitrião (Supabase + upload de imagem)
+│   ├── my-cabins.tsx             # Painel do anfitrião — lista, edita, exclui (soft delete), status de aprovação
 │   ├── admin-dashboard.tsx       # Painel admin — estatísticas, aprovações, denúncias (Supabase)
-│   ├── notifications.tsx         # Notificações (ainda mock local)
-│   ├── modal.tsx, +not-found.tsx, +html.tsx  # Utilitários do template Expo Router
-│   └── _layout.tsx               # Layout raiz: monta os 5 Providers + Stack navigator
+│   ├── notifications.tsx         # Notificações (Supabase + Realtime)
+│   ├── +not-found.tsx, +html.tsx # Utilitários do template Expo Router
+│   └── _layout.tsx               # Layout raiz: SafeAreaProvider + 5 Providers + Stack navigator
 ├── context/                      # Estado global via React Context — 5 contexts (ver seção 2)
-├── components/                   # Componentes reutilizáveis (PropertyCard, Themed, StyledText)
+├── components/                   # Componentes reutilizáveis
+│   ├── PropertyCard.tsx, Themed.tsx, StyledText.tsx
+│   ├── explorer/                 # Pedaços extraídos de app/(tabs)/index.tsx (SearchHeader, FilterModal, constantes)
+│   ├── profile/                  # Pedaços extraídos de app/(tabs)/profile.tsx (MenuItem, InfoModal, EditProfileModal, GuestDashboard)
 │   └── __tests__/                # Testes de componente
 ├── services/                     # ★ Camada de acesso ao Supabase — toda query do app passa por aqui
 │   ├── types.ts                  # Enums, interfaces de linha por tabela, ServiceResult<T>
-│   ├── propertyService.ts        # CRUD de properties + upload de imagem (Storage)
+│   ├── propertyService.ts        # CRUD completo (incl. update/delete) + upload de imagem (Storage)
 │   ├── bookingService.ts         # Disponibilidade (RPC), criar/listar/cancelar reservas
 │   ├── reviewService.ts          # Criar/listar avaliações, checar duplicidade
-│   ├── messageService.ts         # Conversas/mensagens + assinatura Realtime (feito, não usado por nenhuma tela ainda)
+│   ├── favoriteService.ts        # Favoritar/desfavoritar, listar
+│   ├── notificationService.ts    # Notificações + RPCs do banco + assinatura Realtime
+│   ├── messageService.ts         # Conversas/mensagens + assinatura Realtime
 │   ├── profileService.ts         # Perfil, troca de role (via RPC), exclusão de conta (soft delete)
 │   ├── adminService.ts           # Estatísticas, aprovação de anúncios, denúncias
-│   └── __tests__/                # Testes de service (mock do Supabase)
+│   └── __tests__/                # Testes de service (mock do Supabase) - todos exceto messageService
 ├── lib/
 │   └── supabase.ts               # Client Supabase único (SecureStore, PKCE, validação de env vars)
 ├── constants/
@@ -76,10 +81,10 @@ Providers React puros, montados em `app/_layout.tsx` nesta ordem:
 | Context | O que gerencia | Persistência | Conectado ao Supabase? |
 |---|---|---|---|
 | `AuthContext` | Sessão do usuário (login Google real via Supabase Auth + fallback estático em `__DEV__`), troca de role, exclusão de conta | SecureStore (sessão) via SDK | **Sim** — login, perfil e troca de role (via RPC `set_own_role`) |
-| `BookingContext` | Reservas feitas **localmente** (usuário estático, ou fallback quando o Supabase falha) | AsyncStorage | Não — é justamente o "modo offline/fallback"; reservas reais vivem só no banco, lidas via `bookingService` |
-| `FavoritesContext` | Cabanas favoritadas | AsyncStorage | Não |
-| `ListingContext` | Catálogo de cabanas **local** (8 hardcoded) — usado como fallback quando `propertyService` falha ou o usuário é estático | Memória | Não — é o fallback da tela Explorar |
-| `NotificationContext` | Notificações do usuário | Memória | Não |
+| `BookingContext` | Reservas feitas **localmente** (usuário estático, ou fallback quando o Supabase falha) | AsyncStorage | Indiretamente — é o "modo offline/fallback"; reservas reais vivem no banco, lidas via `bookingService` direto pelas telas |
+| `FavoritesContext` | Cabanas favoritadas | AsyncStorage como cache offline | **Sim** — via `favoriteService`, com fallback pro cache local |
+| `ListingContext` | Catálogo de cabanas **local** (8 hardcoded) — usado como fallback quando `propertyService` falha ou o usuário é estático | Memória | Não — é o fallback da tela Explorar e do painel do anfitrião |
+| `NotificationContext` | Notificações do usuário | Memória (mock) / Supabase quando conectado | **Sim** — via `notificationService`, com Realtime e `refresh()` exposto pra outras telas |
 
 ---
 
@@ -94,7 +99,7 @@ já usados no projeto) + `@types/jest`.
 assíncrono do React 19 ainda não tinha comitado a árvore no momento do `toJSON()`. Testing Library
 usa `act()` internamente e resolve isso corretamente.
 
-**Cobertura atual**: 6 suítes de teste, 19 testes, 0 pendências (`it.todo`).
+**Cobertura atual**: 11 suítes de teste, 53 testes, 0 pendências (`it.todo`).
 
 | Suíte | O que cobre |
 |---|---|
@@ -104,6 +109,11 @@ usa `act()` internamente e resolve isso corretamente.
 | `context/__tests__/BookingContext.test.tsx` | Criar reserva válida, rejeitar `check_out <= check_in`, persistência com desconto Pix, persistência por usuário, cancelamento |
 | `context/__tests__/FavoritesContext.test.tsx` | Adicionar/remover favorito, persistência por usuário |
 | `services/__tests__/profileService.test.ts` | Confirma que a troca de role usa o RPC `set_own_role` e nunca um `UPDATE` direto |
+| `services/__tests__/propertyService.test.ts` | CRUD completo, upload de imagem, `approveProperty` mapeando pra `ativo`/`inativo` |
+| `services/__tests__/bookingService.test.ts` | `checkAvailability` usa o RPC `is_property_available` (não reimplementa a lógica no client), `getBookingsByHost` via `properties!inner` |
+| `services/__tests__/reviewService.test.ts` | Criar/listar (com embed de autor), `hasReviewed` |
+| `services/__tests__/favoriteService.test.ts` | Adicionar/remover/checar favorito |
+| `services/__tests__/notificationService.test.ts` | RPCs do banco (`get_unread_notifications_count`, `mark_all_notifications_read`), assinatura Realtime com filtro server-side |
 
 Todo acesso ao Supabase nos testes é mockado (`jest.mock('@supabase/supabase-js', ...)` e o mock
 oficial de `@react-native-async-storage/async-storage`) — nenhum teste bate em rede ou em banco real.
@@ -114,8 +124,8 @@ npm test              # roda a suíte inteira uma vez
 npm run test:watch    # modo watch, reroda ao salvar
 ```
 
-**Lacuna conhecida**: `services/` (fora `profileService`) ainda não tem testes próprios — os outros
-6 arquivos de service não foram cobertos nesta fase (não foi pedido explicitamente).
+**Lacuna conhecida**: `messageService.ts` ainda não tem teste próprio (não foi pedido explicitamente
+nesta fase). Os outros 6 arquivos de service estão cobertos.
 
 ---
 
@@ -142,15 +152,16 @@ via CI) — o pipeline cobre só qualidade de código (tipos + testes).
 | RF-002 | Buscar hospedagens por nome, localização ou tipo de ambiente | ✅ Conectado ao Supabase | `app/(tabs)/index.tsx` — busca por título/localização (`ilike`) + filtro por nível de isolamento, sobre dados reais |
 | RF-003 | Visualizar detalhes da hospedagem com fotos, preço e descrição | ✅ Conectado ao Supabase | `app/details.tsx` → `propertyService.getPropertyById()` |
 | RF-004 | Realizar reservas diretamente pelo aplicativo | ✅ Conectado ao Supabase | `app/details.tsx` → `bookingService.checkAvailability()` + `createBooking()`, desconto PIX 5% mantido |
-| RF-005 | Salvar hospedagens como favoritas | ❌ Não conectado | `FavoritesContext` — 100% local (AsyncStorage); tabela `favorites` existe no banco mas não é usada |
-| RF-006 | Enviar e receber mensagens entre hóspedes e anfitriões | ❌ Não conectado | `app/(tabs)/messages.tsx` usa `INITIAL_CHATS` hardcoded; `services/messageService.ts` existe e está pronto (inclusive assinatura Realtime), mas nenhuma tela o usa ainda |
+| RF-005 | Salvar hospedagens como favoritas | ✅ Conectado ao Supabase | `FavoritesContext` → `services/favoriteService.ts`. AsyncStorage virou cache offline (não mais fonte única) |
+| RF-006 | Enviar e receber mensagens entre hóspedes e anfitriões | ✅ Conectado ao Supabase | `app/(tabs)/messages.tsx` → `messageService` (conversas, histórico, envio, Realtime com dedupe, marca como lida ao abrir) |
 | RF-007 | Fazer login com conta Google | ⚠️ Implementado, mas **bloqueado para teste** | `app/login.tsx`, `app/oauth-callback.tsx`, `AuthContext` — funciona via Supabase Auth (PKCE), mas o Expo Go não completa o redirect no iOS; validação pendente em development build Android |
 | RF-008 | Editar perfil e trocar foto de perfil | ❌ Não conectado | `app/(tabs)/profile.tsx` já tem a UI (modal de edição, seletor de foto via `expo-image-picker`), mas só grava em estado local (`setProfileAvatar`) — nunca chama `profileService.updateProfile()` |
 | RF-009 | Avaliar hospedagens após estadia | ✅ Conectado ao Supabase | `app/review.tsx`, botão "Avaliar" em `app/(tabs)/bookings.tsx`, reviews reais exibidas em `app/details.tsx` |
 | RF-010 | Administradores gerenciarem denúncias e aprovações de anúncios | ✅ Conectado ao Supabase | `app/admin-dashboard.tsx` → `adminService` — estatísticas, aprovação de anúncios e denúncias reais; ranking de mais reservadas e gerenciador de destaques continuam ilustrativos (sem função de serviço correspondente) |
 
-**Resumo**: 6 de 10 conectados de ponta a ponta, 1 implementado mas bloqueado por infraestrutura de
-teste (não por código), 3 ainda não conectados (favoritos, mensagens, edição de perfil).
+**Resumo**: 8 de 10 conectados de ponta a ponta, 1 implementado mas bloqueado por infraestrutura de
+teste (não por código), 1 ainda não conectado (RF-008, edição de perfil — `profile.tsx` foi dividido
+em componentes menores nesta sessão, mas sem mudar comportamento, então continua local).
 
 ---
 
@@ -159,11 +170,11 @@ teste (não por código), 3 ainda não conectados (favoritos, mensagens, ediçã
 | ID | Requisito (texto oficial do TCC) | Status | Evidência |
 |---|---|---|---|
 | RNF-001 | Usabilidade — acessível a diferentes níveis de familiaridade | ⚠️ Parcial | Loading/erro/vazio tratados nas telas conectadas ao Supabase (Explorar, Detalhes, Anfitrião, Avaliações, Admin); ausente nas telas ainda não conectadas (Mensagens, Notificações, Favoritos, Perfil) |
-| RNF-002 | Manter dados locais (reservas e favoritos) mesmo offline | ✅ Implementado (reservas) / ❌ ainda não (favoritos) | `BookingContext` guarda reservas locais/fallback via AsyncStorage; `FavoritesContext` também usa AsyncStorage, mas só como fonte única (não como cache de um dado que também existe no banco) |
+| RNF-002 | Manter dados locais (reservas e favoritos) mesmo offline | ✅ Implementado | `BookingContext` e `FavoritesContext` guardam AsyncStorage como cache offline; ambos sincronizam com o Supabase quando online e caem pro cache local quando a query falha ou o usuário é o estático de dev |
 | RNF-003 | Garantir segurança básica de autenticação e login | ✅ Implementado, com uma ressalva conhecida | RLS habilitado em todas as tabelas; migração fechando escalação de privilégio via `profiles.role` (troca de role só via RPC `set_own_role`); segredos fora do versionamento. Ressalva: PKCE usa `code_challenge_method=plain` em vez de `s256` por limitação do runtime RN/Hermes (não bloqueante, documentado em `CLAUDE.md`) |
 | RNF-004 | Carregar rapidamente, evitar travamentos (meta < 300ms) | ⚠️ Não medido formalmente | Filtros da Explorar memoizados (`useMemo`); banco com índices (`gin`/`trgm` para busca textual, `btree` para preço/status/isolamento) — mas sem testes de carga ou medição de tempo de resposta feitos até agora |
 | RNF-005 | Consistência visual entre modo claro e escuro | ❌ Não implementado de fato | `constants/Colors.ts` define paletas light/dark e `components/Themed.tsx` existe, mas a maioria das telas usa cores fixas (`#2D5A27` etc.) direto no `StyleSheet`, não os tokens de tema — não há alternância funcional de tema no app |
-| RNF-006 | Comunicação confiável e rastreável entre usuários | ❌ Não implementado | Depende do chat (RF-006), que ainda é mock local; `messageService` já suporta Realtime mas nenhuma tela assina |
+| RNF-006 | Comunicação confiável e rastreável entre usuários | ✅ Implementado | Chat real (RF-006) com Realtime (mensagens chegam na hora, com dedupe do eco da própria mensagem), leitura marcada por mensagem (`read_at`) e integrada ao contador de notificações |
 | RNF-007 | Preparado para integração com banco de dados Supabase | ✅ Implementado | Schema completo com RLS, camada `services/` isolando todo acesso a dados, client único em `lib/supabase.ts`, seed de dados de exemplo (`supabase/seed.sql`) |
 
 ---
