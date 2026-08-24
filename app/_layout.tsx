@@ -5,6 +5,7 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import 'react-native-reanimated';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AuthProvider } from '../context/AuthContext';
 import { BookingProvider } from '../context/BookingContext';
@@ -33,17 +34,19 @@ export default function RootLayout() {
   if (!loaded) return null;
 
   return (
-    <AuthProvider>
-      <BookingProvider>
-        <FavoritesProvider>
-          <NotificationProvider>
-            <ListingProvider>
-              <RootLayoutNav />
-            </ListingProvider>
-          </NotificationProvider>
-        </FavoritesProvider>
-      </BookingProvider>
-    </AuthProvider>
+    <SafeAreaProvider>
+      <AuthProvider>
+        <BookingProvider>
+          <FavoritesProvider>
+            <NotificationProvider>
+              <ListingProvider>
+                <RootLayoutNav />
+              </ListingProvider>
+            </NotificationProvider>
+          </FavoritesProvider>
+        </BookingProvider>
+      </AuthProvider>
+    </SafeAreaProvider>
   );
 }
 
