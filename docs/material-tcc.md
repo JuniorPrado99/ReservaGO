@@ -4,18 +4,9 @@
 > `feature/oauth-google` (não do README, que ainda descreve um estado antigo
 > do projeto — ver `CLAUDE.md`, seção "Divergências"). Todo o conteúdo abaixo
 > descreve o que **existe de fato no código**, não o que foi planejado.
-
-> ⚠️ **Aviso importante sobre as seções 5 e 6 (RF/RNF)**: não existe, em
-> nenhum lugar deste repositório, uma lista oficial de requisitos funcionais
-> (RF-001 a RF-010) ou não funcionais (RNF-001 a RNF-007). Os números RF-001,
-> RF-002, RF-003, RF-004, RF-009 e RF-010 foram citados nas instruções desta
-> sessão associados a telas específicas (Explorar, Detalhes, Avaliações,
-> Admin) — os demais (RF-005 a RF-008) e todos os RNF foram **inferidos**
-> aqui a partir das funcionalidades reais do app, tentando preencher a
-> lacuna de forma coerente. **Confira estas duas seções contra o documento
-> oficial do seu TCC antes de usar** — se a numeração ou o texto oficial for
-> diferente, é só reordenar/renomear; o *conteúdo* (o que está ou não
-> conectado) continua válido.
+>
+> As seções 5 e 6 usam a numeração oficial de RF/RNF do documento do TCC
+> (ver `CLAUDE.md`, seção "Requisitos do TCC — numeração oficial").
 
 ---
 
@@ -145,39 +136,35 @@ via CI) — o pipeline cobre só qualidade de código (tipos + testes).
 
 ## 5. Requisitos Funcionais (RF) — status real
 
-*(ver aviso no topo do documento sobre a origem desta numeração)*
-
-| ID | Requisito | Status | Onde |
+| ID | Requisito (texto oficial do TCC) | Status | Onde |
 |---|---|---|---|
-| RF-001 | Buscar/explorar cabanas por categoria | ✅ Conectado ao Supabase | `app/(tabs)/index.tsx` → `propertyService.getProperties()` |
-| RF-002 | Filtrar cabanas por preço e nível de isolamento | ✅ Conectado (filtro em sandbox, sobre dados reais) | `app/(tabs)/index.tsx` |
-| RF-003 | Ver detalhes completos de uma cabana | ✅ Conectado ao Supabase | `app/details.tsx` → `propertyService.getPropertyById()` |
-| RF-004 | Reservar uma cabana (datas, pagamento, disponibilidade) | ✅ Conectado ao Supabase | `app/details.tsx` → `bookingService.checkAvailability()` + `createBooking()`, desconto PIX 5% mantido |
-| RF-005 | Autenticação de usuário (login com Google) | ⚠️ Implementado, mas **bloqueado para teste** | `app/login.tsx`, `app/oauth-callback.tsx`, `AuthContext` — funciona via Supabase Auth (PKCE), mas o Expo Go não completa o redirect no iOS; validação pendente em development build Android |
-| RF-006 | Favoritar cabanas | ❌ Não conectado | `FavoritesContext` — 100% local (AsyncStorage), tabela `favorites` existe no banco mas não é usada |
-| RF-007 | Anfitrião cadastrar e gerenciar suas cabanas | ✅ Conectado ao Supabase | `app/create-listing.tsx` (+ upload de imagem pro Storage), `app/my-cabins.tsx` |
-| RF-008 | Mensagens entre hóspede e anfitrião | ❌ Não conectado | `app/(tabs)/messages.tsx` continua 100% mock local; `services/messageService.ts` existe e está pronto (inclusive assinatura Realtime), mas nenhuma tela o usa ainda |
-| RF-009 | Avaliar uma estadia concluída | ✅ Implementado nesta fase | `app/review.tsx`, botão "Avaliar" em `app/(tabs)/bookings.tsx`, reviews reais exibidas em `app/details.tsx` |
-| RF-010 | Painel administrativo (estatísticas, moderação) | ✅ Conectado nesta fase | `app/admin-dashboard.tsx` → `adminService` — estatísticas, aprovação de anúncios e denúncias reais; ranking de mais reservadas e gerenciador de destaques continuam ilustrativos (sem função de serviço correspondente) |
+| RF-001 | Explorar hospedagens por categoria (praia, campo, cachoeira) | ✅ Conectado ao Supabase | `app/(tabs)/index.tsx` → `propertyService.getProperties()` |
+| RF-002 | Buscar hospedagens por nome, localização ou tipo de ambiente | ✅ Conectado ao Supabase | `app/(tabs)/index.tsx` — busca por título/localização (`ilike`) + filtro por nível de isolamento, sobre dados reais |
+| RF-003 | Visualizar detalhes da hospedagem com fotos, preço e descrição | ✅ Conectado ao Supabase | `app/details.tsx` → `propertyService.getPropertyById()` |
+| RF-004 | Realizar reservas diretamente pelo aplicativo | ✅ Conectado ao Supabase | `app/details.tsx` → `bookingService.checkAvailability()` + `createBooking()`, desconto PIX 5% mantido |
+| RF-005 | Salvar hospedagens como favoritas | ❌ Não conectado | `FavoritesContext` — 100% local (AsyncStorage); tabela `favorites` existe no banco mas não é usada |
+| RF-006 | Enviar e receber mensagens entre hóspedes e anfitriões | ❌ Não conectado | `app/(tabs)/messages.tsx` usa `INITIAL_CHATS` hardcoded; `services/messageService.ts` existe e está pronto (inclusive assinatura Realtime), mas nenhuma tela o usa ainda |
+| RF-007 | Fazer login com conta Google | ⚠️ Implementado, mas **bloqueado para teste** | `app/login.tsx`, `app/oauth-callback.tsx`, `AuthContext` — funciona via Supabase Auth (PKCE), mas o Expo Go não completa o redirect no iOS; validação pendente em development build Android |
+| RF-008 | Editar perfil e trocar foto de perfil | ❌ Não conectado | `app/(tabs)/profile.tsx` já tem a UI (modal de edição, seletor de foto via `expo-image-picker`), mas só grava em estado local (`setProfileAvatar`) — nunca chama `profileService.updateProfile()` |
+| RF-009 | Avaliar hospedagens após estadia | ✅ Conectado ao Supabase | `app/review.tsx`, botão "Avaliar" em `app/(tabs)/bookings.tsx`, reviews reais exibidas em `app/details.tsx` |
+| RF-010 | Administradores gerenciarem denúncias e aprovações de anúncios | ✅ Conectado ao Supabase | `app/admin-dashboard.tsx` → `adminService` — estatísticas, aprovação de anúncios e denúncias reais; ranking de mais reservadas e gerenciador de destaques continuam ilustrativos (sem função de serviço correspondente) |
 
 **Resumo**: 6 de 10 conectados de ponta a ponta, 1 implementado mas bloqueado por infraestrutura de
-teste (não por código), 2 ainda não iniciados (favoritos, mensagens).
+teste (não por código), 3 ainda não conectados (favoritos, mensagens, edição de perfil).
 
 ---
 
 ## 6. Requisitos Não Funcionais (RNF) — status real
 
-*(ver aviso no topo do documento — lista inferida, sem fonte oficial encontrada no repositório)*
-
-| ID | Requisito | Status | Evidência |
+| ID | Requisito (texto oficial do TCC) | Status | Evidência |
 |---|---|---|---|
-| RNF-001 | Segurança dos dados do usuário | ✅ Implementado, com uma ressalva conhecida | RLS habilitado em todas as tabelas; migração fechando escalação de privilégio via `profiles.role` (troca de role só via RPC `set_own_role`); segredos fora do versionamento (`.env` no `.gitignore`, `.env.example` documentado). Ressalva: PKCE usa `code_challenge_method=plain` em vez de `s256` por limitação do runtime RN/Hermes (não bloqueante, documentado em `CLAUDE.md`) |
-| RNF-002 | Usabilidade (feedback claro de loading/erro/vazio) | ⚠️ Parcial | Implementado em todas as telas conectadas nesta fase (Explorar, Detalhes, Anfitrião, Avaliações, Admin); ausente nas telas ainda não conectadas (Mensagens, Notificações, Favoritos) |
-| RNF-003 | Compatibilidade multiplataforma (iOS/Android) | ⚠️ Parcial | App roda em Expo (iOS/Android/Web) com New Architecture habilitada; porém o fluxo de login com Google só será validado em Android por ora — build iOS pendente por falta de conta Apple Developer Program |
-| RNF-004 | Desempenho | ⚠️ Não medido formalmente | Filtros da Explorar memoizados (`useMemo`); banco com índices (`gin`/`trgm` para busca textual, `btree` para preço/status/isolamento) — mas sem testes de carga ou medição de tempo de resposta nesta fase |
-| RNF-005 | Disponibilidade / resiliência a falhas do backend | ✅ Implementado | Toda tela conectada ao Supabase tem fallback para dados locais (contexts) quando a query falha ou o usuário é o de desenvolvimento (`static-*`) — o app nunca fica bloqueado por indisponibilidade do backend |
-| RNF-006 | Manutenibilidade | ✅ Implementado | Camada `services/` isolando acesso a dados; 19 testes automatizados; CI rodando type-check + testes a cada push/PR; `CLAUDE.md` mantido sincronizado com o código real a cada sessão |
-| RNF-007 | Escalabilidade | ⚠️ Arquitetura permite, não testado | Backend gerenciado (Supabase/Postgres) desacoplado do cliente via `services/`; sem testes de carga/concorrência realizados |
+| RNF-001 | Usabilidade — acessível a diferentes níveis de familiaridade | ⚠️ Parcial | Loading/erro/vazio tratados nas telas conectadas ao Supabase (Explorar, Detalhes, Anfitrião, Avaliações, Admin); ausente nas telas ainda não conectadas (Mensagens, Notificações, Favoritos, Perfil) |
+| RNF-002 | Manter dados locais (reservas e favoritos) mesmo offline | ✅ Implementado (reservas) / ❌ ainda não (favoritos) | `BookingContext` guarda reservas locais/fallback via AsyncStorage; `FavoritesContext` também usa AsyncStorage, mas só como fonte única (não como cache de um dado que também existe no banco) |
+| RNF-003 | Garantir segurança básica de autenticação e login | ✅ Implementado, com uma ressalva conhecida | RLS habilitado em todas as tabelas; migração fechando escalação de privilégio via `profiles.role` (troca de role só via RPC `set_own_role`); segredos fora do versionamento. Ressalva: PKCE usa `code_challenge_method=plain` em vez de `s256` por limitação do runtime RN/Hermes (não bloqueante, documentado em `CLAUDE.md`) |
+| RNF-004 | Carregar rapidamente, evitar travamentos (meta < 300ms) | ⚠️ Não medido formalmente | Filtros da Explorar memoizados (`useMemo`); banco com índices (`gin`/`trgm` para busca textual, `btree` para preço/status/isolamento) — mas sem testes de carga ou medição de tempo de resposta feitos até agora |
+| RNF-005 | Consistência visual entre modo claro e escuro | ❌ Não implementado de fato | `constants/Colors.ts` define paletas light/dark e `components/Themed.tsx` existe, mas a maioria das telas usa cores fixas (`#2D5A27` etc.) direto no `StyleSheet`, não os tokens de tema — não há alternância funcional de tema no app |
+| RNF-006 | Comunicação confiável e rastreável entre usuários | ❌ Não implementado | Depende do chat (RF-006), que ainda é mock local; `messageService` já suporta Realtime mas nenhuma tela assina |
+| RNF-007 | Preparado para integração com banco de dados Supabase | ✅ Implementado | Schema completo com RLS, camada `services/` isolando todo acesso a dados, client único em `lib/supabase.ts`, seed de dados de exemplo (`supabase/seed.sql`) |
 
 ---
 

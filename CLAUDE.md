@@ -270,7 +270,43 @@ npx expo start --dev-client --clear
 
 ---
 
-## 10. REGRAS PERMANENTES para todas as sessões neste projeto
+## 10. Requisitos do TCC — numeração oficial
+
+Esta numeração vem do documento oficial do TCC (não deste repositório) — confirmada pelo usuário
+em 2026-08-22. Registrado aqui pra nenhuma sessão futura inferir uma numeração própria de novo. O
+status de cada um (conectado/mock/bloqueado) é o que muda a cada sessão — ver `docs/material-tcc.md`
+para o status atualizado; esta tabela é só a numeração/texto, que não muda.
+
+### Requisitos Funcionais (RF)
+
+| ID | Requisito |
+|---|---|
+| RF-001 | Explorar hospedagens por categoria (praia, campo, cachoeira) |
+| RF-002 | Buscar hospedagens por nome, localização ou tipo de ambiente |
+| RF-003 | Visualizar detalhes da hospedagem com fotos, preço e descrição |
+| RF-004 | Realizar reservas diretamente pelo aplicativo |
+| RF-005 | Salvar hospedagens como favoritas |
+| RF-006 | Enviar e receber mensagens entre hóspedes e anfitriões |
+| RF-007 | Fazer login com conta Google |
+| RF-008 | Editar perfil e trocar foto de perfil |
+| RF-009 | Avaliar hospedagens após estadia |
+| RF-010 | Administradores gerenciarem denúncias e aprovações de anúncios |
+
+### Requisitos Não Funcionais (RNF)
+
+| ID | Requisito |
+|---|---|
+| RNF-001 | Usabilidade — acessível a diferentes níveis de familiaridade |
+| RNF-002 | Manter dados locais (reservas e favoritos) mesmo offline |
+| RNF-003 | Garantir segurança básica de autenticação e login |
+| RNF-004 | Carregar rapidamente, evitar travamentos (meta < 300ms) |
+| RNF-005 | Consistência visual entre modo claro e escuro |
+| RNF-006 | Comunicação confiável e rastreável entre usuários |
+| RNF-007 | Preparado para integração com banco de dados Supabase |
+
+---
+
+## 11. REGRAS PERMANENTES para todas as sessões neste projeto
 
 1. Nunca altere arquivos que eu não pedi explicitamente.
 2. Sempre me mostre o plano antes de escrever código.
