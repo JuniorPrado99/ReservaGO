@@ -63,6 +63,7 @@ function RootLayoutNav() {
         {/* ✅ Nova rota de notificações */}
         <Stack.Screen name="notifications" options={{ headerShown: false }} />
         <Stack.Screen name="oauth-callback" options={{ headerShown: false }} />
+        <Stack.Screen name="review" options={{ headerShown: false }} />
       </Stack>
     </ThemeProvider>
   );

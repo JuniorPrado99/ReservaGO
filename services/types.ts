@@ -96,6 +96,11 @@ export type NewBooking = Pick<
   'property_id' | 'guest_id' | 'check_in' | 'check_out' | 'pay_method' | 'price_per_night' | 'total' | 'pix_discount'
 >;
 
+/** Booking + dados básicos da propriedade, via embed properties(...) no select do bookingService. */
+export interface BookingWithProperty extends Booking {
+  properties: { title: string; location: string; images: string[] } | null;
+}
+
 // ── favorites ────────────────────────────────────────────────────────
 export interface Favorite {
   id: string;

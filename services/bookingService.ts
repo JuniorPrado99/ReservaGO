@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase';
-import { Booking, NewBooking, ServiceResult, toResult } from './types';
+import { Booking, BookingWithProperty, NewBooking, ServiceResult, toResult } from './types';
 
 // Acesso à tabela `bookings` (supabase/schema.sql). O próprio banco garante
 // check_out > check_in via CONSTRAINT valid_dates (schema.sql linha 159) -
@@ -29,13 +29,13 @@ export async function createBooking(dados: NewBooking): Promise<ServiceResult<Bo
   return toResult(data, error);
 }
 
-export async function getBookingsByGuest(guestId: string): Promise<ServiceResult<Booking[]>> {
+export async function getBookingsByGuest(guestId: string): Promise<ServiceResult<BookingWithProperty[]>> {
   const { data, error } = await supabase
     .from('bookings')
-    .select('*')
+    .select('*, properties(title, location, images)')
     .eq('guest_id', guestId)
     .order('check_in', { ascending: false });
-  return toResult(data, error);
+  return toResult(data as unknown as BookingWithProperty[] | null, error);
 }
 
 export async function getBookingsByHost(hostId: string): Promise<ServiceResult<Booking[]>> {
