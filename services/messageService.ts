@@ -1,18 +1,31 @@
 import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
-import { Conversation, Message, NewMessage, ServiceResult, toResult } from './types';
+import { ConversationWithParticipants, Message, NewMessage, ServiceResult, toResult } from './types';
 
 // Acesso a `conversations` e `messages` (supabase/schema.sql). Realtime já
 // está habilitado pra `messages` (ALTER PUBLICATION supabase_realtime ADD
 // TABLE messages, schema.sql linha 665).
 
-export async function getConversations(userId: string): Promise<ServiceResult<Conversation[]>> {
+export async function getConversations(userId: string): Promise<ServiceResult<ConversationWithParticipants[]>> {
   const { data, error } = await supabase
     .from('conversations')
-    .select('*')
+    .select('*, guest:profiles!conversations_guest_id_fkey(name, avatar_url), host:profiles!conversations_host_id_fkey(name, avatar_url)')
     .or(`guest_id.eq.${userId},host_id.eq.${userId}`)
     .order('last_message_at', { ascending: false });
-  return toResult(data, error);
+  return toResult(data as unknown as ConversationWithParticipants[] | null, error);
+}
+
+/** IDs de conversas com pelo menos 1 mensagem não lida recebida por esse usuário (RLS já restringe às conversas dele). */
+export async function getUnreadConversationIds(userId: string): Promise<ServiceResult<string[]>> {
+  const { data, error } = await supabase
+    .from('messages')
+    .select('conversation_id')
+    .neq('sender_id', userId)
+    .is('read_at', null);
+
+  if (error) return toResult<string[]>(null, error);
+  const ids = Array.from(new Set((data ?? []).map((m: { conversation_id: string }) => m.conversation_id)));
+  return { data: ids, error: null };
 }
 
 export async function getMessages(conversationId: string): Promise<ServiceResult<Message[]>> {

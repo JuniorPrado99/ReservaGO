@@ -1,10 +1,22 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
-  StyleSheet, Text, View, FlatList, Image,
+  ActivityIndicator, StyleSheet, Text, View, FlatList, Image,
   TouchableOpacity, Modal, TextInput, KeyboardAvoidingView,
   Platform, ScrollView,
 } from 'react-native';
 import { Mail, ChevronRight, Send, X, ShieldCheck } from 'lucide-react-native';
+import { useAuth } from '../../context/AuthContext';
+import { useNotifications } from '../../context/NotificationContext';
+import {
+  getConversations,
+  getMessages,
+  getUnreadConversationIds,
+  markAsRead as markMessagesRead,
+  sendMessage as sendMessageRemote,
+  subscribeToMessages,
+} from '../../services/messageService';
+import { markMessageNotificationsAsRead } from '../../services/notificationService';
+import type { ConversationWithParticipants, Message as DbMessage } from '../../services/types';
 
 type Message = {
   id: string;
@@ -21,8 +33,11 @@ type Chat = {
   unread: boolean;
   isSupport: boolean;
   messages: Message[];
+  /** true = veio do Supabase (conversations reais); ausente/false = mock local ou fallback. */
+  isReal?: boolean;
 };
 
+// Usado só como fallback: usuário estático de dev, ou quando getConversations falha.
 const INITIAL_CHATS: Chat[] = [
   {
     id: 'support',
@@ -70,38 +85,170 @@ const SUPPORT_REPLY: Message = {
   text: 'Obrigado por entrar em contato! Nossa equipe responderá em breve. Tempo médio: 15 minutos. 🌿',
 };
 
+function formatTime(iso: string): string {
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const minutes = Math.floor(diffMs / 60000);
+  if (minutes < 1) return 'Agora';
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  if (days === 1) return 'Ontem';
+  return `${days}d`;
+}
+
+function mapConversation(conv: ConversationWithParticipants, userId: string, unreadIds: Set<string>): Chat {
+  const isGuest = conv.guest_id === userId;
+  const other = isGuest ? conv.host : conv.guest;
+  return {
+    id: conv.id,
+    hostName: other?.name || (isGuest ? 'Anfitrião' : 'Hóspede'),
+    lastMessage: conv.last_message ?? 'Conversa iniciada',
+    time: conv.last_message_at ? formatTime(conv.last_message_at) : '',
+    avatar: other?.avatar_url ?? null,
+    unread: unreadIds.has(conv.id),
+    isSupport: false,
+    messages: [],
+    isReal: true,
+  };
+}
+
+function mapMessage(m: DbMessage, userId: string): Message {
+  return { id: m.id, from: m.sender_id === userId ? 'me' : 'them', text: m.content };
+}
+
 export default function MessagesScreen() {
+  const { user } = useAuth();
+  const { refresh: refreshNotifications } = useNotifications();
+
+  // Usuário estático (__DEV__) não existe em profiles/auth - fica só no
+  // mock local, como sempre funcionou.
+  const isStaticUser = !!user?.id && user.id.startsWith('static-');
+  const isConnected = !!user?.id && !isStaticUser;
+
   const [chats, setChats] = useState<Chat[]>(INITIAL_CHATS);
+  const [loading, setLoading] = useState(isConnected);
   const [activeChat, setActiveChat] = useState<Chat | null>(null);
   const [inputText, setInputText] = useState('');
+  const activeChatIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    activeChatIdRef.current = activeChat?.id ?? null;
+  }, [activeChat?.id]);
+
+  const loadConversations = () => {
+    if (!isConnected || !user?.id) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    Promise.all([getConversations(user.id), getUnreadConversationIds(user.id)]).then(
+      ([convResult, unreadResult]) => {
+        if (convResult.error || !convResult.data) {
+          console.log('[messages] getConversations falhou, usando mock local ->', convResult.error);
+          setLoading(false);
+          return;
+        }
+        const unreadIds = new Set(unreadResult.data ?? []);
+        setChats(convResult.data.map((c) => mapConversation(c, user.id, unreadIds)));
+        setLoading(false);
+      }
+    );
+  };
+
+  useEffect(() => {
+    loadConversations();
+    if (!isConnected || !user?.id) return;
+
+    const unsubscribe = subscribeToMessages(user.id, (message) => {
+      if (message.conversation_id === activeChatIdRef.current) {
+        setActiveChat((prev) => {
+          if (!prev) return prev;
+          if (prev.messages.some((m) => m.id === message.id)) return prev; // eco da própria mensagem
+          return { ...prev, messages: [...prev.messages, mapMessage(message, user.id)] };
+        });
+        if (message.sender_id !== user.id) {
+          markMessagesRead([message.id]);
+          markMessageNotificationsAsRead([message.id]);
+          refreshNotifications();
+        }
+      }
+      // Recarrega a lista (last_message/hora/badge de não lida) - mais
+      // simples e confiável do que remendar o estado local aqui.
+      loadConversations();
+    });
+
+    return unsubscribe;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isConnected, user?.id]);
 
   const openChat = (chat: Chat) => {
     setChats((prev) => prev.map((c) => (c.id === chat.id ? { ...c, unread: false } : c)));
-    setActiveChat({ ...chat, unread: false });
+
+    if (!chat.isReal || !user?.id) {
+      setActiveChat({ ...chat, unread: false });
+      return;
+    }
+
+    setActiveChat({ ...chat, unread: false, messages: [] });
+
+    getMessages(chat.id).then(({ data, error }) => {
+      if (error || !data) {
+        console.log('[messages] getMessages falhou ->', error);
+        return;
+      }
+      const mapped = data.map((m) => mapMessage(m, user.id));
+      setActiveChat((prev) => (prev && prev.id === chat.id ? { ...prev, messages: mapped } : prev));
+
+      const unreadIncoming = data.filter((m) => m.sender_id !== user.id && !m.read_at).map((m) => m.id);
+      if (unreadIncoming.length > 0) {
+        markMessagesRead(unreadIncoming);
+        markMessageNotificationsAsRead(unreadIncoming);
+        refreshNotifications();
+      }
+    });
   };
 
   const sendMessage = () => {
     const text = inputText.trim();
     if (!text || !activeChat) return;
 
-    const newMsg: Message = { id: String(Date.now()), from: 'me', text };
-    const updatedChat: Chat = {
-      ...activeChat,
-      messages: [...activeChat.messages, newMsg],
-      lastMessage: text,
-      time: 'Agora',
-    };
+    if (!activeChat.isReal || !user?.id) {
+      // Fluxo local de sempre (mock / usuário estático)
+      const newMsg: Message = { id: String(Date.now()), from: 'me', text };
+      const updatedChat: Chat = {
+        ...activeChat,
+        messages: [...activeChat.messages, newMsg],
+        lastMessage: text,
+        time: 'Agora',
+      };
+      setActiveChat(updatedChat);
+      setChats((prev) => prev.map((c) => (c.id === activeChat.id ? updatedChat : c)));
+      setInputText('');
 
-    setActiveChat(updatedChat);
-    setChats((prev) => prev.map((c) => (c.id === activeChat.id ? updatedChat : c)));
-    setInputText('');
-
-    if (activeChat.isSupport) {
-      setTimeout(() => {
-        const reply: Message = { ...SUPPORT_REPLY, id: String(Date.now() + 1) };
-        setActiveChat((prev) => prev ? { ...prev, messages: [...prev.messages, reply] } : prev);
-      }, 1200);
+      if (activeChat.isSupport) {
+        setTimeout(() => {
+          const reply: Message = { ...SUPPORT_REPLY, id: String(Date.now() + 1) };
+          setActiveChat((prev) => prev ? { ...prev, messages: [...prev.messages, reply] } : prev);
+        }, 1200);
+      }
+      return;
     }
+
+    setInputText('');
+    sendMessageRemote({ conversation_id: activeChat.id, sender_id: user.id, content: text }).then(
+      ({ data, error }) => {
+        if (error || !data) {
+          console.log('[messages] sendMessage falhou ->', error);
+          return;
+        }
+        setActiveChat((prev) => {
+          if (!prev || prev.id !== activeChat.id) return prev;
+          if (prev.messages.some((m) => m.id === data.id)) return prev; // já chegou via Realtime
+          return { ...prev, messages: [...prev.messages, mapMessage(data, user.id)] };
+        });
+      }
+    );
   };
 
   return (
@@ -110,7 +257,11 @@ export default function MessagesScreen() {
         <Text style={styles.title}>Mensagens</Text>
       </View>
 
-      {chats.length > 0 ? (
+      {loading ? (
+        <View style={styles.emptyContainer}>
+          <ActivityIndicator size="large" color="#2D5A27" />
+        </View>
+      ) : chats.length > 0 ? (
         <FlatList
           data={chats}
           keyExtractor={(item) => item.id}
@@ -121,7 +272,7 @@ export default function MessagesScreen() {
                   <ShieldCheck size={24} color="#2D5A27" />
                 </View>
               ) : (
-                <Image source={{ uri: item.avatar! }} style={styles.avatar} />
+                <Image source={{ uri: item.avatar ?? undefined }} style={styles.avatar} />
               )}
 
               <View style={styles.chatContent}>
@@ -176,7 +327,7 @@ export default function MessagesScreen() {
                 <ShieldCheck size={18} color="#2D5A27" />
               </View>
             ) : (
-              <Image source={{ uri: activeChat?.avatar! }} style={styles.chatModalAvatar} />
+              <Image source={{ uri: activeChat?.avatar ?? undefined }} style={styles.chatModalAvatar} />
             )}
           </View>
 

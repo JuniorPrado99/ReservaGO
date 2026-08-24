@@ -26,6 +26,21 @@ export async function markAllAsRead(userId: string): Promise<ServiceResult<null>
   return toResult<null>(null, error);
 }
 
+/**
+ * Marca como lidas as notificações ligadas a mensagens específicas
+ * (notifications.message_id) - usado por messages.tsx ao abrir uma
+ * conversa, pra manter o contador do sino em sincronia com o que já foi
+ * lido no chat, sem marcar notificações de OUTROS tipos como lidas.
+ */
+export async function markMessageNotificationsAsRead(messageIds: string[]): Promise<ServiceResult<null>> {
+  if (messageIds.length === 0) return { data: null, error: null };
+  const { error } = await supabase
+    .from('notifications')
+    .update({ read: true })
+    .in('message_id', messageIds);
+  return toResult<null>(null, error);
+}
+
 /** Marcar UMA notificação como lida não tem function própria no banco - update direto, coberto por notifications_own_update (RLS). */
 export async function markAsRead(id: string): Promise<ServiceResult<AppNotification>> {
   const { data, error } = await supabase

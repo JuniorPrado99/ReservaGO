@@ -151,6 +151,20 @@ export interface Message {
 
 export type NewMessage = Pick<Message, 'conversation_id' | 'sender_id' | 'content'>;
 
+/**
+ * Conversation + nome/avatar dos dois participantes, via embed duplo de
+ * profiles no select do messageService (conversations tem DUAS FKs pra
+ * profiles - guest_id e host_id - por isso precisa do hint !fkey explícito
+ * pra cada uma, senão o PostgREST não sabe qual usar). Nomes de constraint
+ * assumidos pela convenção padrão do Postgres (<tabela>_<coluna>_fkey), já
+ * que schema.sql não nomeia essas FKs explicitamente - não pude confirmar
+ * contra o banco real nesta sessão.
+ */
+export interface ConversationWithParticipants extends Conversation {
+  guest: { name: string; avatar_url: string | null } | null;
+  host: { name: string; avatar_url: string | null } | null;
+}
+
 // ── notifications ────────────────────────────────────────────────────
 export interface AppNotification {
   id: string;

@@ -26,6 +26,8 @@ interface NotificationContextData {
   markAsRead: (id: string) => void;
   markAllAsRead: () => void;
   addNotification: (n: Omit<AppNotification, 'id' | 'read'>) => void;
+  /** Reconsulta a contagem de não lidas no Supabase - usado por outras telas (ex.: messages.tsx) depois de mexer em algo que pode ter mudado o total. No-op pra usuário estático/desconectado. */
+  refresh: () => void;
 }
 
 // Usado só como fallback local (usuário estático de dev, ou quando o
@@ -128,6 +130,7 @@ const NotificationContext = createContext<NotificationContextData>({
   markAsRead: () => {},
   markAllAsRead: () => {},
   addNotification: () => {},
+  refresh: () => {},
 });
 
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
@@ -219,8 +222,12 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     setNotifications(prev => [newN, ...prev]);
   }, []);
 
+  const refresh = useCallback(() => {
+    if (isConnected && user?.id) refreshUnreadCount(user.id);
+  }, [isConnected, user?.id, refreshUnreadCount]);
+
   return (
-    <NotificationContext.Provider value={{ notifications, unreadCount, markAsRead, markAllAsRead, addNotification }}>
+    <NotificationContext.Provider value={{ notifications, unreadCount, markAsRead, markAllAsRead, addNotification, refresh }}>
       {children}
     </NotificationContext.Provider>
   );
