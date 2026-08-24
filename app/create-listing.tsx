@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import { AlignLeft, Camera, ChevronLeft, DollarSign, Home, MapPin } from 'lucide-react-native';
 import React, { useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   Image,
   KeyboardAvoidingView, Platform,
@@ -13,7 +14,10 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
+import { useAuth } from '../context/AuthContext';
 import { useListings } from '../context/ListingContext';
+import { createProperty, uploadPropertyImage } from '../services/propertyService';
+import type { IsolationLevel } from '../services/types';
 
 const CATEGORIES = [
   { id: 'Praia Privativa', emoji: '🏖️', label: 'Praia Privativa' },
@@ -49,6 +53,8 @@ const ISOLATION_LEVELS = [
 export default function CreateListingScreen() {
   const router = useRouter();
   const { addListing } = useListings();
+  const { user } = useAuth();
+  const [saving, setSaving] = useState(false);
 
   const [title, setTitle] = useState('');
   const [location, setLocation] = useState('');
@@ -69,7 +75,25 @@ export default function CreateListingScreen() {
     if (!result.canceled) setImageUri(result.assets[0].uri);
   };
 
-  const handleSave = () => {
+  // Usuário estático (__DEV__) não existe em profiles/auth - continua salvando
+  // só localmente (ListingContext), como sempre funcionou.
+  const saveLocally = () => {
+    addListing({
+      title: title.trim(),
+      location: location.trim(),
+      price: parseFloat(price) || 0,
+      description: description.trim(),
+      imageUri,
+      isolationLevel,
+      // saveLocally só é chamada depois dos guards de title/category em
+      // handleSave, mas o TS não carrega essa narrowing pra uma função
+      // separada - '' nunca acontece na prática.
+      category: category ?? '',
+      subCategory: subCategory || 'Populares',
+    });
+  };
+
+  const handleSave = async () => {
     if (!title.trim()) {
       Alert.alert('Campo obrigatório', 'Informe o título do anúncio.');
       return;
@@ -78,20 +102,67 @@ export default function CreateListingScreen() {
       Alert.alert('Campo obrigatório', 'Selecione uma categoria.');
       return;
     }
-    addListing({
+
+    const isStaticUser = !!user?.id && user.id.startsWith('static-');
+
+    if (!user || isStaticUser) {
+      saveLocally();
+      Alert.alert('Anúncio publicado! 🌿', 'Sua cabana já está visível no explorar.', [
+        { text: 'Ver minhas cabanas', onPress: () => router.replace('/my-cabins') },
+        { text: 'OK', onPress: () => router.back() },
+      ]);
+      return;
+    }
+
+    setSaving(true);
+
+    let imageUrl: string | null = null;
+    if (imageUri) {
+      const { data: uploadedUrl, error: uploadError } = await uploadPropertyImage(imageUri, user.id);
+      if (uploadError) {
+        console.log('[create-listing] upload de imagem falhou ->', uploadError);
+        // segue sem imagem em vez de travar o anúncio inteiro por causa da foto
+      } else {
+        imageUrl = uploadedUrl;
+      }
+    }
+
+    const { data: property, error } = await createProperty({
+      owner_id: user.id,
       title: title.trim(),
+      description: description.trim(),
       location: location.trim(),
       price: parseFloat(price) || 0,
-      description: description.trim(),
-      imageUri,
-      isolationLevel,
+      isolation_level: (isolationLevel as IsolationLevel | null) ?? null,
       category,
-      subCategory: subCategory || 'Populares',
+      sub_category: subCategory || 'Populares',
+      images: imageUrl ? [imageUrl] : [],
+      amenities: [],
+      // status omitido de propósito - o banco usa o default 'pendente'
+      // (properties.status NOT NULL DEFAULT 'pendente', schema.sql).
     });
-    Alert.alert('Anúncio publicado! 🌿', 'Sua cabana já está visível no explorar.', [
-      { text: 'Ver minhas cabanas', onPress: () => router.replace('/my-cabins') },
-      { text: 'OK', onPress: () => router.back() },
-    ]);
+
+    setSaving(false);
+
+    if (error || !property) {
+      console.log('[create-listing] createProperty falhou, salvando local ->', error);
+      saveLocally();
+      Alert.alert(
+        'Salvo só neste aparelho',
+        'Não foi possível publicar no servidor agora, mas o anúncio já aparece no seu painel.',
+        [{ text: 'Ver minhas cabanas', onPress: () => router.replace('/my-cabins') }]
+      );
+      return;
+    }
+
+    Alert.alert(
+      'Anúncio enviado! 🌿',
+      'Sua cabana foi enviada para aprovação e vai aparecer no explorar assim que for revisada.',
+      [
+        { text: 'Ver minhas cabanas', onPress: () => router.replace('/my-cabins') },
+        { text: 'OK', onPress: () => router.back() },
+      ]
+    );
   };
 
   return (
@@ -239,8 +310,16 @@ export default function CreateListingScreen() {
       </ScrollView>
 
       <View style={styles.footer}>
-        <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-          <Text style={styles.saveButtonText}>Publicar Anúncio</Text>
+        <TouchableOpacity
+          style={[styles.saveButton, saving && { opacity: 0.6 }]}
+          onPress={handleSave}
+          disabled={saving}
+        >
+          {saving ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.saveButtonText}>Publicar Anúncio</Text>
+          )}
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>

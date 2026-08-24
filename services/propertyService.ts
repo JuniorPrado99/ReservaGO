@@ -43,6 +43,31 @@ export async function createProperty(dados: NewProperty): Promise<ServiceResult<
   return toResult(data, error);
 }
 
+/**
+ * Envia a imagem (uri local do expo-image-picker) pro bucket "properties"
+ * do Storage (schema.sql, público) e devolve a URL pública. RN/Expo: lê o
+ * arquivo via fetch(uri).blob() - não precisa de expo-file-system pra isso.
+ */
+export async function uploadPropertyImage(uri: string, ownerId: string): Promise<ServiceResult<string>> {
+  try {
+    const response = await fetch(uri);
+    const blob = await response.blob();
+    const fileExt = uri.split('.').pop()?.split('?')[0]?.toLowerCase() || 'jpg';
+    const path = `${ownerId}/${Date.now()}.${fileExt}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('properties')
+      .upload(path, blob, { contentType: `image/${fileExt}`, upsert: false });
+
+    if (uploadError) return { data: null, error: uploadError.message };
+
+    const { data: publicUrlData } = supabase.storage.from('properties').getPublicUrl(path);
+    return { data: publicUrlData.publicUrl, error: null };
+  } catch (err: any) {
+    return { data: null, error: err?.message ?? 'Falha ao enviar imagem.' };
+  }
+}
+
 export async function approveProperty(id: string, aprovado: boolean): Promise<ServiceResult<Property>> {
   // cabin_status não tem um valor "rejeitado" dedicado - usamos 'ativo' pra
   // aprovar e 'inativo' pra reprovar (RLS properties_admin_update permite
