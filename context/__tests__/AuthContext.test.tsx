@@ -2,6 +2,10 @@ import React from 'react';
 import { Alert } from 'react-native';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
+jest.mock('@react-native-async-storage/async-storage', () =>
+  require('@react-native-async-storage/async-storage/jest/async-storage-mock')
+);
+
 // AuthContext importa `supabase` de lib/supabase.ts, que chama createClient()
 // de @supabase/supabase-js no carregamento do módulo. A fábrica do mock não
 // referencia nenhuma variável externa (só coisas "mock*" seriam permitidas
@@ -33,9 +37,10 @@ jest.mock('../../services/profileService', () => ({
 
 jest.spyOn(Alert, 'alert').mockImplementation(() => {});
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../../lib/supabase';
 import { deleteAccount as mockDeleteAccountService } from '../../services/profileService';
-import { AuthProvider, useAuth } from '../AuthContext';
+import { AuthProvider, KEEP_SIGNED_IN_KEY, useAuth } from '../AuthContext';
 
 const mockOnAuthStateChange = supabase.auth.onAuthStateChange as jest.Mock;
 const mockSignOut = supabase.auth.signOut as jest.Mock;
@@ -45,8 +50,9 @@ const wrapper = ({ children }: { children: React.ReactNode }) => (
   <AuthProvider>{children}</AuthProvider>
 );
 
-beforeEach(() => {
+beforeEach(async () => {
   jest.clearAllMocks();
+  await AsyncStorage.clear();
   // Simula o comportamento real do Supabase: a primeira coisa que o listener
   // recebe é o estado atual da sessão - aqui, nenhuma sessão ativa.
   mockOnAuthStateChange.mockImplementation((callback: (event: string, session: any) => void) => {
@@ -195,5 +201,37 @@ describe('AuthContext', () => {
 
     expect(mockSignOut).not.toHaveBeenCalled();
     expect(result.current.user).not.toBeNull();
+  });
+
+  it('sessão restaurada no boot (INITIAL_SESSION) é descartada se o usuário escolheu não salvar a conta no dispositivo', async () => {
+    await AsyncStorage.setItem(KEEP_SIGNED_IN_KEY, 'false');
+    mockOnAuthStateChange.mockImplementation((callback: (event: string, session: any) => void) => {
+      callback('INITIAL_SESSION', {
+        user: { id: 'real-user-uuid', email: 'junior@gmail.com', user_metadata: {} },
+      });
+      return { data: { subscription: { unsubscribe: jest.fn() } } };
+    });
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(mockSignOut).toHaveBeenCalledTimes(1);
+    expect(result.current.user).toBeNull();
+    expect(result.current.session).toBeNull();
+  });
+
+  it('sessão restaurada no boot (INITIAL_SESSION) carrega o perfil normalmente quando o usuário escolheu salvar (ou nunca respondeu)', async () => {
+    mockOnAuthStateChange.mockImplementation((callback: (event: string, session: any) => void) => {
+      callback('INITIAL_SESSION', {
+        user: { id: 'real-user-uuid', email: 'junior@gmail.com', user_metadata: {} },
+      });
+      return { data: { subscription: { unsubscribe: jest.fn() } } };
+    });
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(mockSignOut).not.toHaveBeenCalled();
+    expect(result.current.user?.id).toBe('real-user-uuid');
   });
 });

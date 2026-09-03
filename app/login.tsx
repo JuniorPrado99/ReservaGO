@@ -1,4 +1,5 @@
 import { FontAwesome } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
@@ -15,7 +16,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useAuth } from '../context/AuthContext';
+import { KEEP_SIGNED_IN_KEY, useAuth } from '../context/AuthContext';
 import { installCryptoSubtlePolyfillIfNeeded } from '../lib/cryptoPolyfill';
 import { supabase } from '../lib/supabase';
 
@@ -120,8 +121,33 @@ export default function LoginScreen() {
             return;
           }
 
-          console.log('[login] sessão criada com sucesso, redirecionando para /(tabs)');
-          router.replace('/(tabs)');
+          console.log('[login] sessão criada com sucesso');
+
+          // Pergunta feita uma vez por login: se o usuário escolher "Não
+          // salvar", AuthContext descarta a sessão restaurada no próximo boot
+          // do app (ver onAuthStateChange, evento INITIAL_SESSION) - a sessão
+          // atual continua valendo normalmente até o app ser fechado.
+          Alert.alert(
+            'Manter conectado?',
+            'Deseja que sua conta fique salva neste dispositivo? Se não salvar, você vai precisar entrar de novo na próxima vez que abrir o app.',
+            [
+              {
+                text: 'Não salvar',
+                style: 'cancel',
+                onPress: async () => {
+                  await AsyncStorage.setItem(KEEP_SIGNED_IN_KEY, 'false');
+                  router.replace('/(tabs)');
+                },
+              },
+              {
+                text: 'Manter conectado',
+                onPress: async () => {
+                  await AsyncStorage.setItem(KEEP_SIGNED_IN_KEY, 'true');
+                  router.replace('/(tabs)');
+                },
+              },
+            ]
+          );
         } else {
           console.log('[login] sessão de autenticação não retornou "success" -> type =', result.type);
         }

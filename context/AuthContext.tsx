@@ -1,8 +1,14 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Session } from '@supabase/supabase-js';
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Alert } from 'react-native';
 import { supabase } from '../lib/supabase';
 import { deleteAccount as deleteAccountInDb, updateRole as updateRoleInDb } from '../services/profileService';
+
+// Preferência do usuário (por dispositivo, não por conta) sobre manter ou não
+// a sessão do Google salva entre aberturas do app - perguntada em
+// app/login.tsx logo após um login com Google bem-sucedido.
+export const KEEP_SIGNED_IN_KEY = '@reservago:keepSignedIn';
 
 export type UserRole = 'hospede' | 'anfitriao' | 'admin';
 
@@ -111,6 +117,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, newSession) => {
       console.log('[auth] onAuthStateChange ->', event, '| sessão presente?', !!newSession);
       if (!isMounted) return;
+
+      // INITIAL_SESSION é a sessão restaurada do SecureStore no boot do app -
+      // se o usuário escolheu não deixar a conta salva neste dispositivo
+      // (pergunta feita em app/login.tsx logo após o login), descarta essa
+      // sessão restaurada e trata como se não houvesse nenhuma, em vez de
+      // deixar entrar direto sem pedir login de novo.
+      if (event === 'INITIAL_SESSION' && newSession) {
+        AsyncStorage.getItem(KEEP_SIGNED_IN_KEY).then((keepSignedIn) => {
+          if (!isMounted) return;
+          if (keepSignedIn === 'false') {
+            console.log('[auth] sessão restaurada, mas usuário escolheu não salvar a conta neste dispositivo - encerrando');
+            supabase.auth.signOut().catch(() => {}).finally(() => {
+              if (!isMounted) return;
+              setSession(null);
+              setUser(null);
+              setLoading(false);
+            });
+            return;
+          }
+          setSession(newSession);
+          loadProfileForSession(newSession).finally(() => isMounted && setLoading(false));
+        });
+        return;
+      }
+
       setSession(newSession);
 
       if (!newSession) {
@@ -122,7 +153,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Só recarrega o profile quando a identidade muda de fato — evita
       // sobrescrever alterações locais (ex: updateRole) a cada renovação
       // automática de token (TOKEN_REFRESHED).
-      if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION' || event === 'USER_UPDATED') {
+      if (event === 'SIGNED_IN' || event === 'USER_UPDATED') {
         loadProfileForSession(newSession).finally(() => isMounted && setLoading(false));
       } else {
         setLoading(false);
