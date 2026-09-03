@@ -31,7 +31,18 @@ export default function OAuthCallback() {
     handledRef.current = true;
 
     (async () => {
-      const { error } = await supabase.auth.exchangeCodeForSession(url);
+      // exchangeCodeForSession espera só o código (ex.: '34e770dd-9ff9-...'),
+      // não a URL inteira - passar a URL toda faz o servidor responder
+      // "invalid flow state" (confirmado em depuração - ver app/login.tsx).
+      const codeMatch = url.match(/[?&]code=([^&]+)/);
+      const code = codeMatch ? decodeURIComponent(codeMatch[1]) : null;
+      if (!code) {
+        console.log('[oauth-callback] não achei "code=" na URL ->', url);
+        setErrorMessage('Não foi possível ler o código de autorização retornado.');
+        return;
+      }
+
+      const { error } = await supabase.auth.exchangeCodeForSession(code);
       console.log('[oauth-callback] exchangeCodeForSession ->', { error: error?.message ?? null });
 
       if (error) {

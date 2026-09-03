@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
+import { installCryptoSubtlePolyfillIfNeeded } from '../lib/cryptoPolyfill';
 import { supabase } from '../lib/supabase';
 
 export default function LoginScreen() {
@@ -45,6 +46,11 @@ export default function LoginScreen() {
   const handleGoogleLogin = async () => {
     setIsGoogleLoading(true);
     try {
+      // Instalado só agora (não no boot do app) - é o momento mais seguro
+      // pra isso, depois que toda a inicialização normal do app (incluindo
+      // o que quer que configure crypto.getRandomValues) já rodou faz tempo.
+      installCryptoSubtlePolyfillIfNeeded();
+
       const redirectTo = Linking.createURL('oauth-callback');
       console.log('[login] iniciando OAuth Google | redirectTo =', redirectTo, '| platform =', Platform.OS);
 
@@ -75,6 +81,39 @@ export default function LoginScreen() {
 
         if (result.type === 'success') {
           console.log('[login] [SUCCESS] url de retorno recebida ->', result.url);
+
+          // Troca o código por sessão aqui mesmo, em vez de depender de
+          // app/oauth-callback.tsx (useURL()) pegar essa URL depois: no Android,
+          // a tela de callback pode montar (via deep link do SO) antes desse
+          // retorno estar disponível pra ela, e useURL() fica null pra sempre -
+          // travando a tela no spinner "Concluindo login com Google...". Aqui
+          // já temos a URL certa na mão, então fechamos o fluxo direto.
+          //
+          // IMPORTANTE: exchangeCodeForSession espera só o CÓDIGO (uma string
+          // tipo '34e770dd-9ff9-...'), não a URL inteira - ver o exemplo na
+          // própria tipagem do SDK (GoTrueClient.d.ts). Passar a URL completa
+          // faz o servidor responder "invalid flow state, no valid flow state
+          // found", porque ele recebe a URL toda como se fosse o auth_code e
+          // não bate com nenhum flow_state de verdade - foi exatamente esse o
+          // bug que travou o login todo esse tempo (confirmado testando a
+          // troca via curl, direto, com o código extraído manualmente).
+          const codeMatch = result.url.match(/[?&]code=([^&]+)/);
+          const code = codeMatch ? decodeURIComponent(codeMatch[1]) : null;
+          if (!code) {
+            console.log('[login] não achei "code=" na URL de retorno ->', result.url);
+            Alert.alert('Erro ao entrar com Google', 'Não foi possível ler o código de autorização retornado.');
+            return;
+          }
+
+          const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+          if (exchangeError) {
+            console.log('[login] erro ao trocar código por sessão ->', exchangeError.message);
+            Alert.alert('Erro ao entrar com Google', exchangeError.message);
+            return;
+          }
+
+          console.log('[login] sessão criada com sucesso, redirecionando para /(tabs)');
+          router.replace('/(tabs)');
         } else {
           console.log('[login] sessão de autenticação não retornou "success" -> type =', result.type);
         }
