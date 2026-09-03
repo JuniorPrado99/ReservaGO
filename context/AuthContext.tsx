@@ -2,7 +2,7 @@ import type { Session } from '@supabase/supabase-js';
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Alert } from 'react-native';
 import { supabase } from '../lib/supabase';
-import { updateRole as updateRoleInDb } from '../services/profileService';
+import { deleteAccount as deleteAccountInDb, updateRole as updateRoleInDb } from '../services/profileService';
 
 export type UserRole = 'hospede' | 'anfitriao' | 'admin';
 
@@ -149,8 +149,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = async () => {
-    await supabase.auth.signOut();
-    setUser(null);
+    // "Sair da conta" precisa funcionar mesmo se a chamada de rede pro
+    // Supabase falhar/travar (sem internet, servidor lento etc.) - sign-out
+    // é fundamentalmente uma ação local (limpar a sessão salva) e o usuário
+    // nunca deveria ficar "preso" logado só por causa de uma rede ruim.
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) console.log('[auth] signOut retornou erro ->', error.message);
+    } catch (e: any) {
+      console.log('[auth] signOut lançou exceção ->', e?.message ?? e);
+    } finally {
+      setUser(null);
+    }
   };
 
   const updateRole = async (role: UserRole) => {
@@ -173,17 +183,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const deleteAccount = async () => {
     if (!user) return;
-    Alert.alert('Excluir conta', 'Tem certeza?', [
-      { text: 'Cancelar', style: 'cancel' },
-      {
-        text: 'Excluir',
-        style: 'destructive',
-        onPress: async () => {
-          await supabase.auth.signOut();
-          setUser(null);
+    Alert.alert(
+      'Excluir conta',
+      'Tem certeza? Seus dados de perfil serão desativados e você será desconectado. Essa ação não pode ser desfeita por você mesmo.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Excluir',
+          style: 'destructive',
+          onPress: async () => {
+            // Usuários estáticos de dev (STATIC_USERS, ids "static-*") não têm
+            // linha em profiles - não faz sentido chamar o soft delete real
+            // pra eles (mesma ressalva de updateRole, acima).
+            if (!user.id.startsWith('static-')) {
+              const { error } = await deleteAccountInDb(user.id);
+              if (error) {
+                Alert.alert('Erro ao excluir conta', error);
+                return;
+              }
+            }
+
+            try {
+              const { error } = await supabase.auth.signOut();
+              if (error) console.log('[auth] signOut (delete) retornou erro ->', error.message);
+            } catch (e: any) {
+              console.log('[auth] signOut (delete) lançou exceção ->', e?.message ?? e);
+            } finally {
+              setUser(null);
+            }
+          },
         },
-      },
-    ]);
+      ]
+    );
   };
 
   return (

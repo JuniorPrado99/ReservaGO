@@ -19,7 +19,7 @@ import { PRIVACY_SECTIONS, TERMS_SECTIONS } from '../../components/profile/profi
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { user, logout } = useAuth();
+  const { user, logout, deleteAccount } = useAuth();
   const { unreadCount: UNREAD_NOTIFICATIONS } = useNotifications();
 
   const [isEditModalVisible, setEditModalVisible] = useState(false);
@@ -192,7 +192,7 @@ export default function ProfileScreen() {
             <LogOut size={20} color="#EF4444" />
             <Text style={styles.logoutText}>Sair da conta</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.deleteButton} onPress={() => {}}>
+          <TouchableOpacity style={styles.deleteButton} onPress={deleteAccount}>
             <Trash2 size={20} color="#EF4444" />
             <Text style={styles.deleteText}>Excluir conta</Text>
           </TouchableOpacity>

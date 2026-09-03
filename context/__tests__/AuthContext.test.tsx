@@ -22,13 +22,24 @@ jest.mock('@supabase/supabase-js', () => ({
   })),
 }));
 
+// deleteAccount (AuthContext) delega o soft delete pra profileService - aqui
+// testamos só se o Context chama (ou não chama, pro usuário estático) essa
+// função corretamente, não a query em si (isso já é coberto em
+// services/__tests__/profileService.test.ts).
+jest.mock('../../services/profileService', () => ({
+  updateRole: jest.fn(),
+  deleteAccount: jest.fn(),
+}));
+
 jest.spyOn(Alert, 'alert').mockImplementation(() => {});
 
 import { supabase } from '../../lib/supabase';
+import { deleteAccount as mockDeleteAccountService } from '../../services/profileService';
 import { AuthProvider, useAuth } from '../AuthContext';
 
 const mockOnAuthStateChange = supabase.auth.onAuthStateChange as jest.Mock;
 const mockSignOut = supabase.auth.signOut as jest.Mock;
+const mockDeleteAccount = mockDeleteAccountService as jest.Mock;
 
 const wrapper = ({ children }: { children: React.ReactNode }) => (
   <AuthProvider>{children}</AuthProvider>
@@ -43,7 +54,16 @@ beforeEach(() => {
     return { data: { subscription: { unsubscribe: jest.fn() } } };
   });
   mockSignOut.mockResolvedValue({ error: null });
+  mockDeleteAccount.mockResolvedValue({ data: {}, error: null });
 });
+
+// Simula o usuário tocando no botão "Excluir" do Alert.alert de confirmação
+// (o app não chama isso sozinho - é o próprio Alert nativo do SO).
+function confirmDeleteAccountAlert() {
+  (Alert.alert as jest.Mock).mockImplementationOnce((_title, _message, buttons) => {
+    buttons?.find((b: { text?: string }) => b.text === 'Excluir')?.onPress?.();
+  });
+}
 
 describe('AuthContext', () => {
   it('estado inicial: sem sessão do Supabase, user e session começam null e loading termina false', async () => {
@@ -96,5 +116,84 @@ describe('AuthContext', () => {
 
     expect(mockSignOut).toHaveBeenCalledTimes(1);
     expect(result.current.user).toBeNull();
+  });
+
+  it('logout limpa o user mesmo se supabase.auth.signOut() falhar (não pode travar o usuário logado)', async () => {
+    mockSignOut.mockRejectedValueOnce(new Error('rede indisponível'));
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await result.current.login('anfitriao@reservago.com', '1234');
+    });
+    expect(result.current.user).not.toBeNull();
+
+    await act(async () => {
+      await result.current.logout();
+    });
+
+    expect(result.current.user).toBeNull();
+  });
+
+  it('deleteAccount pede confirmação e, pra usuário estático de dev, só desconecta local (sem chamar profileService)', async () => {
+    confirmDeleteAccountAlert();
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await result.current.login('anfitriao@reservago.com', '1234');
+    });
+
+    await act(async () => {
+      await result.current.deleteAccount();
+    });
+
+    expect(Alert.alert).toHaveBeenCalled();
+    expect(mockDeleteAccount).not.toHaveBeenCalled();
+    expect(mockSignOut).toHaveBeenCalledTimes(1);
+    expect(result.current.user).toBeNull();
+  });
+
+  it('deleteAccount, pra usuário real (sessão do Supabase), chama profileService.deleteAccount com o id certo e limpa o estado', async () => {
+    confirmDeleteAccountAlert();
+    mockOnAuthStateChange.mockImplementation((callback: (event: string, session: any) => void) => {
+      callback('SIGNED_IN', {
+        user: { id: 'real-user-uuid', email: 'junior@gmail.com', user_metadata: {} },
+      });
+      return { data: { subscription: { unsubscribe: jest.fn() } } };
+    });
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.user?.id).toBe('real-user-uuid');
+
+    await act(async () => {
+      await result.current.deleteAccount();
+    });
+
+    expect(mockDeleteAccount).toHaveBeenCalledWith('real-user-uuid');
+    expect(mockSignOut).toHaveBeenCalledTimes(1);
+    expect(result.current.user).toBeNull();
+  });
+
+  it('deleteAccount não desconecta se profileService.deleteAccount devolver erro', async () => {
+    confirmDeleteAccountAlert();
+    mockDeleteAccount.mockResolvedValueOnce({ data: null, error: 'falha ao excluir' });
+    mockOnAuthStateChange.mockImplementation((callback: (event: string, session: any) => void) => {
+      callback('SIGNED_IN', {
+        user: { id: 'real-user-uuid', email: 'junior@gmail.com', user_metadata: {} },
+      });
+      return { data: { subscription: { unsubscribe: jest.fn() } } };
+    });
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await result.current.deleteAccount();
+    });
+
+    expect(mockSignOut).not.toHaveBeenCalled();
+    expect(result.current.user).not.toBeNull();
   });
 });
