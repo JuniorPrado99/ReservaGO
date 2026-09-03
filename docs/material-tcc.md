@@ -154,14 +154,14 @@ via CI) — o pipeline cobre só qualidade de código (tipos + testes).
 | RF-004 | Realizar reservas diretamente pelo aplicativo | ✅ Conectado ao Supabase | `app/details.tsx` → `bookingService.checkAvailability()` + `createBooking()`, desconto PIX 5% mantido |
 | RF-005 | Salvar hospedagens como favoritas | ✅ Conectado ao Supabase | `FavoritesContext` → `services/favoriteService.ts`. AsyncStorage virou cache offline (não mais fonte única) |
 | RF-006 | Enviar e receber mensagens entre hóspedes e anfitriões | ✅ Conectado ao Supabase | `app/(tabs)/messages.tsx` → `messageService` (conversas, histórico, envio, Realtime com dedupe, marca como lida ao abrir) |
-| RF-007 | Fazer login com conta Google | ⚠️ Implementado, mas **bloqueado para teste** | `app/login.tsx`, `app/oauth-callback.tsx`, `AuthContext` — funciona via Supabase Auth (PKCE), mas o Expo Go não completa o redirect no iOS; validação pendente em development build Android |
+| RF-007 | Fazer login com conta Google | ✅ Conectado ao Supabase, validado de ponta a ponta | `app/login.tsx`, `app/oauth-callback.tsx`, `AuthContext` — Supabase Auth (PKCE) num development build Android real (EAS + emulador). Bug corrigido em 03/09/2026: `exchangeCodeForSession` esperava só o código de autorização, não a URL de retorno inteira — ver `CLAUDE.md`, item 12. Continua verdade que o Expo Go não serve pra esse fluxo (seção 9 do `CLAUDE.md`) — só o dev build funciona |
 | RF-008 | Editar perfil e trocar foto de perfil | ❌ Não conectado | `app/(tabs)/profile.tsx` já tem a UI (modal de edição, seletor de foto via `expo-image-picker`), mas só grava em estado local (`setProfileAvatar`) — nunca chama `profileService.updateProfile()` |
 | RF-009 | Avaliar hospedagens após estadia | ✅ Conectado ao Supabase | `app/review.tsx`, botão "Avaliar" em `app/(tabs)/bookings.tsx`, reviews reais exibidas em `app/details.tsx` |
 | RF-010 | Administradores gerenciarem denúncias e aprovações de anúncios | ✅ Conectado ao Supabase | `app/admin-dashboard.tsx` → `adminService` — estatísticas, aprovação de anúncios e denúncias reais; ranking de mais reservadas e gerenciador de destaques continuam ilustrativos (sem função de serviço correspondente) |
 
-**Resumo**: 8 de 10 conectados de ponta a ponta, 1 implementado mas bloqueado por infraestrutura de
-teste (não por código), 1 ainda não conectado (RF-008, edição de perfil — `profile.tsx` foi dividido
-em componentes menores nesta sessão, mas sem mudar comportamento, então continua local).
+**Resumo**: 9 de 10 conectados de ponta a ponta e validados (RF-007 fechado em 03/09/2026), 1 ainda
+não conectado (RF-008, edição de perfil — `profile.tsx` foi dividido em componentes menores numa
+sessão anterior, mas sem mudar comportamento, então continua local).
 
 ---
 
