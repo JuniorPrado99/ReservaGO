@@ -454,7 +454,7 @@ export default function DetailsScreen() {
                 />
                 <View style={{ flex: 1 }}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                    <Text style={styles.reviewAuthor}>{r.profiles?.name || 'Hóspede'}</Text>
+                    <Text style={styles.reviewAuthor}>{r.profiles?.name || 'Usuário removido'}</Text>
                     <Text style={styles.reviewDate}>
                       {new Date(r.created_at).toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' })}
                     </Text>

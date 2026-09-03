@@ -102,7 +102,7 @@ function mapConversation(conv: ConversationWithParticipants, userId: string, unr
   const other = isGuest ? conv.host : conv.guest;
   return {
     id: conv.id,
-    hostName: other?.name || (isGuest ? 'Anfitrião' : 'Hóspede'),
+    hostName: other?.name || 'Usuário removido',
     lastMessage: conv.last_message ?? 'Conversa iniciada',
     time: conv.last_message_at ? formatTime(conv.last_message_at) : '',
     avatar: other?.avatar_url ?? null,
