@@ -59,6 +59,14 @@ export default function LoginScreen() {
         options: {
           redirectTo,
           skipBrowserRedirect: Platform.OS !== 'web',
+          // Sem isso, se a conta Google já estiver com sessão ativa no
+          // dispositivo, o Google pula direto pro redirect sem mostrar nada -
+          // dá a impressão de que o "Sair da conta" (que só encerra a sessão
+          // do app, nunca a do Google no aparelho - isso é comportamento
+          // padrão de "Entrar com Google" em qualquer app) não funcionou,
+          // porque o próximo login parece automático. Com prompt=select_account,
+          // o Google sempre mostra a tela de escolher conta de novo.
+          queryParams: { prompt: 'select_account' },
         },
       });
 
