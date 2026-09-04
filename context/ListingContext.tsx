@@ -10,7 +10,8 @@ export interface Listing {
   image?: string | null;
   isolationLevel: string | null;
   createdAt: string;
-  bookings: number;
+  bookingsCount: number;
+  rating: number;
   category?: string;
   subCategory?: string;
   hostId?: string;
@@ -19,7 +20,7 @@ export interface Listing {
 interface ListingContextData {
   listings: Listing[];
   allProperties: Listing[];
-  addListing: (l: Omit<Listing, 'id' | 'createdAt' | 'bookings'>) => void;
+  addListing: (l: Omit<Listing, 'id' | 'createdAt' | 'bookingsCount' | 'rating'>) => void;
   removeListing: (id: string) => void;
   updateListing: (id: string, data: Partial<Listing>) => void;
 }
@@ -43,7 +44,8 @@ const INITIAL_PROPERTIES: Listing[] = [
     image: 'https://images.unsplash.com/photo-1537956965359-7573183d1f57?w=800&q=80',
     isolationLevel: 'extremo',
     createdAt: '10/01/2025',
-    bookings: 8,
+    bookingsCount: 8,
+    rating: 4.8,
     category: 'Praia Privativa',
     subCategory: 'Populares',
     hostId: 'static-anfitriao-01',
@@ -57,7 +59,8 @@ const INITIAL_PROPERTIES: Listing[] = [
     image: 'https://images.unsplash.com/photo-1499793983690-e29da59ef1c2?w=800&q=80',
     isolationLevel: 'extremo',
     createdAt: '05/02/2025',
-    bookings: 5,
+    bookingsCount: 5,
+    rating: 4.9,
     category: 'Praia Privativa',
     subCategory: 'Sul',
     hostId: 'static-anfitriao-01',
@@ -71,7 +74,8 @@ const INITIAL_PROPERTIES: Listing[] = [
     image: 'https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?w=800&q=80',
     isolationLevel: 'extremo',
     createdAt: '20/01/2025',
-    bookings: 6,
+    bookingsCount: 6,
+    rating: 5.0,
     category: 'Praia Privativa',
     subCategory: 'Nordeste',
     hostId: 'static-anfitriao-01',
@@ -87,7 +91,8 @@ const INITIAL_PROPERTIES: Listing[] = [
     image: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&q=80',
     isolationLevel: 'isolado',
     createdAt: '03/02/2025',
-    bookings: 4,
+    bookingsCount: 4,
+    rating: 4.9,
     category: 'Campo',
     subCategory: 'Populares',
     hostId: 'static-anfitriao-01',
@@ -101,7 +106,8 @@ const INITIAL_PROPERTIES: Listing[] = [
     image: 'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=800&q=80',
     isolationLevel: 'extremo',
     createdAt: '12/01/2025',
-    bookings: 7,
+    bookingsCount: 7,
+    rating: 5.0,
     category: 'Campo',
     subCategory: 'Montanhas',
     hostId: 'static-anfitriao-01',
@@ -115,7 +121,8 @@ const INITIAL_PROPERTIES: Listing[] = [
     image: 'https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?w=800&q=80',
     isolationLevel: 'semi',
     createdAt: '08/03/2025',
-    bookings: 3,
+    bookingsCount: 3,
+    rating: 4.8,
     category: 'Campo',
     subCategory: 'Planícies',
     hostId: 'static-anfitriao-01',
@@ -129,7 +136,8 @@ const INITIAL_PROPERTIES: Listing[] = [
     image: 'https://images.unsplash.com/photo-1510798831971-661eb04b3739?w=800&q=80',
     isolationLevel: 'isolado',
     createdAt: '15/02/2025',
-    bookings: 9,
+    bookingsCount: 9,
+    rating: 4.9,
     category: 'Campo',
     subCategory: 'Montanhas',
     hostId: 'static-anfitriao-01',
@@ -145,7 +153,8 @@ const INITIAL_PROPERTIES: Listing[] = [
     image: 'https://images.unsplash.com/photo-1532274402911-5a369e4c4bb5?w=800&q=80',
     isolationLevel: 'extremo',
     createdAt: '22/01/2025',
-    bookings: 5,
+    bookingsCount: 5,
+    rating: 4.7,
     category: 'Cachoeira',
     subCategory: 'Centro-Oeste',
     hostId: 'static-anfitriao-01',
@@ -155,14 +164,15 @@ const INITIAL_PROPERTIES: Listing[] = [
 export function ListingProvider({ children }: { children: React.ReactNode }) {
   const [listings, setListings] = useState<Listing[]>(INITIAL_PROPERTIES);
 
-  const addListing = useCallback((l: Omit<Listing, 'id' | 'createdAt' | 'bookings'>) => {
+  const addListing = useCallback((l: Omit<Listing, 'id' | 'createdAt' | 'bookingsCount' | 'rating'>) => {
     const newListing: Listing = {
       ...l,
       id: String(Date.now()),
       image: l.imageUri || l.image || null,
       price: typeof l.price === 'string' ? parseFloat(l.price) || 0 : l.price,
       createdAt: new Date().toLocaleDateString('pt-BR'),
-      bookings: 0,
+      bookingsCount: 0,
+      rating: 0,
     };
     setListings(prev => [newListing, ...prev]);
   }, []);

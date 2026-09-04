@@ -10,8 +10,8 @@ interface PropertyProps {
   price: number;
   rating: number;
   description: string;
-  image: string; 
-  category: string;
+  image?: string | null;
+  category?: string;
 }
 
 export function PropertyCard({ id, title, location, price, rating, description, image, category }: PropertyProps) {
@@ -31,15 +31,16 @@ export function PropertyCard({ id, title, location, price, rating, description, 
       })}
     >
       <View>
-        <Image 
-          source={{ uri: image }} 
-          style={styles.cardImage} 
+        <Image
+          source={{ uri: image ?? undefined }}
+          style={styles.cardImage}
         />
         
         {/* BOTÃO DE CORAÇÃO SOBRE A IMAGEM */}
-        <TouchableOpacity 
-          style={styles.heartButton} 
+        <TouchableOpacity
+          style={styles.heartButton}
           onPress={() => toggleFavorite(id)}
+          testID="favorite-button"
         >
           <Heart 
             size={24} 

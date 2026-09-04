@@ -537,9 +537,21 @@ ALTER TABLE reports ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "profiles_public_read" ON profiles
   FOR SELECT USING (deleted_at IS NULL);
 
--- Usuário só pode editar seu próprio perfil
+-- Usuário só pode editar seu próprio perfil. WITH CHECK compara a role nova
+-- com a role atual via subquery: UPDATE direto NUNCA muda profiles.role
+-- (nem entre 'hospede'/'anfitriao') - a única forma de trocar a própria
+-- role é a function set_own_role() (ver FUNÇÕES AUXILIARES PARA O APP,
+-- mais abaixo). Corrigido via supabase/migrations/001_fix_profiles_self_update_role_escalation.sql
+-- depois de um achado de escalação de privilégio: sem este WITH CHECK,
+-- qualquer usuário autenticado conseguia gravar role='admin' na própria
+-- linha via update comum, direto pela REST API.
 CREATE POLICY "profiles_self_update" ON profiles
-  FOR UPDATE USING (auth.uid() = id);
+  FOR UPDATE
+  USING (auth.uid() = id)
+  WITH CHECK (
+    auth.uid() = id
+    AND role = (SELECT role FROM profiles WHERE id = auth.uid())
+  );
 
 -- ── PROPERTIES ────────────────────────────────────────────
 -- Qualquer um pode ver cabanas ativas
@@ -704,6 +716,31 @@ BEGIN
   );
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Única forma sancionada de um usuário trocar a PRÓPRIA role (SECURITY
+-- DEFINER: bypassa RLS internamente, mas restrito à linha de auth.uid()).
+-- Recusa 'admin' com exceção - promover alguém a admin continua sendo só
+-- manual no banco, de propósito (não existe function equivalente pra isso).
+-- Chamada pelo app via services/profileService.ts -> supabase.rpc('set_own_role', ...).
+CREATE OR REPLACE FUNCTION set_own_role(new_role user_role)
+RETURNS profiles
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  updated profiles;
+BEGIN
+  IF new_role = 'admin' THEN
+    RAISE EXCEPTION 'Não é permitido definir a própria role como admin';
+  END IF;
+
+  UPDATE profiles SET role = new_role WHERE id = auth.uid()
+  RETURNING * INTO updated;
+
+  RETURN updated;
+END;
+$$;
 
 -- ============================================================
 -- DADOS INICIAIS (seed)

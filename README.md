@@ -30,7 +30,7 @@ O sistema suporta dois tipos de usuário:
 - Row Level Security (RLS) para proteção de dados
 
 ### Infraestrutura de desenvolvimento
-- ngrok (tunnel para OAuth em desenvolvimento local)
+- expo-dev-client + EAS Build (development build para testar OAuth fora do Expo Go)
 - GitHub Actions (CI/CD)
 
 ---
@@ -41,8 +41,7 @@ Antes de rodar o projeto, instale:
 
 - [Node.js](https://nodejs.org/) (versão 18 ou superior)
 - [Git](https://git-scm.com/)
-- [Expo Go](https://expo.dev/go) no celular (Android ou iOS)
-- [ngrok](https://ngrok.com/download) instalado globalmente (necessário para login com Google)
+- [Expo Go](https://expo.dev/go) no celular (Android ou iOS) — suficiente pro app em geral; o login com Google exige um development build (ver seção "Autenticação")
 
 ---
 
@@ -60,16 +59,13 @@ npm install
 cp .env.example .env
 # Preencha o .env com as chaves do Supabase (peça ao time)
 
-# 4. Iniciar o Expo (Terminal 1)
+# 4. Iniciar o Expo
 npx expo start --clear
-
-# 5. Iniciar o ngrok (Terminal 2) — necessário para login com Google
-ngrok http 127.0.0.1:8081
 ```
 
 Após iniciar, escaneie o QR Code com o Expo Go (Android) ou com a câmera (iOS).
 
-> ⚠️ Os dois terminais (Expo + ngrok) precisam estar rodando ao mesmo tempo para o login com Google funcionar.
+> ⚠️ O login com Google **não funciona dentro do Expo Go** (limitação do redirecionamento OAuth do próprio Expo Go — ver `CLAUDE.md`, seção 9). Pra testar esse fluxo é necessário um development build (`expo-dev-client` + EAS Build, já configurado em `eas.json`). `ngrok` não faz mais parte do fluxo atual.
 
 ---
 
@@ -109,7 +105,7 @@ npx expo install <pacote>
 ReservaGO/
 ├── app/                    # Telas e rotas (Expo Router)
 │   ├── (tabs)/             # Abas principais (Explorar, Favoritos, Viagens, Perfil)
-│   ├── --/                 # Rota de callback OAuth
+│   ├── oauth-callback.tsx  # Rota de callback OAuth (Supabase Auth, PKCE)
 │   ├── _layout.tsx         # Layout raiz com providers
 │   ├── login.tsx           # Tela de autenticação
 │   ├── details.tsx         # Detalhes da cabana + reserva
@@ -153,7 +149,7 @@ O projeto usa **Supabase** com as seguintes tabelas principais:
 | Tabela | Descrição |
 |--------|-----------|
 | `profiles` | Dados do usuário (nome, email, role, avatar) |
-| `listings` | Cabanas cadastradas pelos anfitriões |
+| `properties` | Cabanas cadastradas pelos anfitriões |
 | `bookings` | Reservas feitas pelos hóspedes |
 | `notifications` | Notificações do sistema |
 
@@ -162,14 +158,14 @@ O projeto usa **Supabase** com as seguintes tabelas principais:
 ## Testes
 
 ```bash
-# Rodar o teste de snapshot
+# Rodar toda a suíte de testes
 npm test
 
-# Atualizar snapshots após mudanças intencionais
-npm test -- -u
+# Modo watch (reroda ao salvar)
+npm run test:watch
 ```
 
-O projeto conta com um **Smoke Test** (teste de fumaça) via Jest que valida a estrutura visual do componente `StyledText` usando snapshot testing.
+O projeto usa **Jest** (`jest-expo` + Testing Library) — hoje com 12 suítes e 62 testes, cobrindo os `context/` principais (`AuthContext`, `BookingContext`, `FavoritesContext`) e quase toda a camada `services/` de acesso ao Supabase (todos os testes mockam o Supabase, nenhum bate em rede/banco real).
 
 ---
 

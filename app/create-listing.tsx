@@ -1,8 +1,9 @@
 import * as ImagePicker from 'expo-image-picker';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { AlignLeft, Camera, ChevronLeft, DollarSign, Home, MapPin } from 'lucide-react-native';
 import React, { useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   Image,
   KeyboardAvoidingView, Platform,
@@ -13,7 +14,10 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
+import { useAuth } from '../context/AuthContext';
 import { useListings } from '../context/ListingContext';
+import { createProperty, updateProperty, uploadPropertyImage, UpdatableProperty } from '../services/propertyService';
+import type { IsolationLevel } from '../services/types';
 
 const CATEGORIES = [
   { id: 'Praia Privativa', emoji: '🏖️', label: 'Praia Privativa' },
@@ -48,16 +52,29 @@ const ISOLATION_LEVELS = [
 
 export default function CreateListingScreen() {
   const router = useRouter();
-  const { addListing } = useListings();
+  const { addListing, updateListing } = useListings();
+  const { user } = useAuth();
+  const params = useLocalSearchParams();
+  const [saving, setSaving] = useState(false);
 
-  const [title, setTitle] = useState('');
-  const [location, setLocation] = useState('');
-  const [price, setPrice] = useState('');
-  const [description, setDescription] = useState('');
-  const [imageUri, setImageUri] = useState<string | null>(null);
-  const [isolationLevel, setIsolationLevel] = useState<string | null>(null);
-  const [category, setCategory] = useState<string | null>(null);
-  const [subCategory, setSubCategory] = useState<string | null>(null);
+  // Modo edição: my-cabins.tsx navega pra cá com editId + os dados atuais
+  // da cabana nos params, em vez de reservar uma tela separada só pra isso.
+  const editId = typeof params.editId === 'string' ? params.editId : undefined;
+  const editIsRemote = params.editIsRemote === '1';
+  const isEditMode = !!editId;
+
+  const [title, setTitle] = useState(isEditMode ? String(params.title ?? '') : '');
+  const [location, setLocation] = useState(isEditMode ? String(params.location ?? '') : '');
+  const [price, setPrice] = useState(isEditMode ? String(params.price ?? '') : '');
+  const [description, setDescription] = useState(isEditMode ? String(params.description ?? '') : '');
+  const [imageUri, setImageUri] = useState<string | null>(isEditMode ? (String(params.image ?? '') || null) : null);
+  const [isolationLevel, setIsolationLevel] = useState<string | null>(
+    isEditMode ? (String(params.isolationLevel ?? '') || null) : null
+  );
+  const [category, setCategory] = useState<string | null>(isEditMode ? (String(params.category ?? '') || null) : null);
+  const [subCategory, setSubCategory] = useState<string | null>(
+    isEditMode ? (String(params.subCategory ?? '') || null) : null
+  );
 
   const pickImage = async () => {
     let result = await ImagePicker.launchImageLibraryAsync({
@@ -69,7 +86,30 @@ export default function CreateListingScreen() {
     if (!result.canceled) setImageUri(result.assets[0].uri);
   };
 
-  const handleSave = () => {
+  // Usuário estático (__DEV__) não existe em profiles/auth - continua salvando
+  // só localmente (ListingContext), como sempre funcionou.
+  const saveLocally = () => {
+    const dados = {
+      title: title.trim(),
+      location: location.trim(),
+      price: parseFloat(price) || 0,
+      description: description.trim(),
+      imageUri,
+      isolationLevel,
+      // saveLocally só é chamada depois dos guards de title/category em
+      // handleSave, mas o TS não carrega essa narrowing pra uma função
+      // separada - '' nunca acontece na prática.
+      category: category ?? '',
+      subCategory: subCategory || 'Populares',
+    };
+    if (isEditMode && editId) {
+      updateListing(editId, dados);
+    } else {
+      addListing(dados);
+    }
+  };
+
+  const handleSave = async () => {
     if (!title.trim()) {
       Alert.alert('Campo obrigatório', 'Informe o título do anúncio.');
       return;
@@ -78,20 +118,109 @@ export default function CreateListingScreen() {
       Alert.alert('Campo obrigatório', 'Selecione uma categoria.');
       return;
     }
-    addListing({
+
+    const isStaticUser = !!user?.id && user.id.startsWith('static-');
+
+    // Edição de cabana local (não veio do banco) - mesmo fluxo local de sempre.
+    if (isEditMode && !editIsRemote) {
+      saveLocally();
+      Alert.alert('Anúncio atualizado! 🌿', 'As alterações já estão visíveis.', [
+        { text: 'Ver minhas cabanas', onPress: () => router.replace('/my-cabins') },
+      ]);
+      return;
+    }
+
+    if (!user || isStaticUser) {
+      saveLocally();
+      Alert.alert(
+        isEditMode ? 'Anúncio atualizado! 🌿' : 'Anúncio publicado! 🌿',
+        isEditMode ? 'As alterações já estão visíveis.' : 'Sua cabana já está visível no explorar.',
+        [
+          { text: 'Ver minhas cabanas', onPress: () => router.replace('/my-cabins') },
+          ...(isEditMode ? [] : [{ text: 'OK', onPress: () => router.back() }]),
+        ]
+      );
+      return;
+    }
+
+    setSaving(true);
+
+    // Só sobe uma imagem nova se o usuário trocou a foto - expo-image-picker
+    // sempre devolve um file:// local; a URL prefill do modo edição é http(s).
+    let imageUrl: string | null = null;
+    const pickedNewImage = !!imageUri && !imageUri.startsWith('http');
+    if (pickedNewImage) {
+      const { data: uploadedUrl, error: uploadError } = await uploadPropertyImage(imageUri!, user.id);
+      if (uploadError) {
+        console.log('[create-listing] upload de imagem falhou ->', uploadError);
+        // segue sem trocar a imagem em vez de travar o anúncio inteiro por causa da foto
+      } else {
+        imageUrl = uploadedUrl;
+      }
+    }
+
+    if (isEditMode && editId) {
+      const dados: UpdatableProperty = {
+        title: title.trim(),
+        description: description.trim(),
+        location: location.trim(),
+        price: parseFloat(price) || 0,
+        isolation_level: (isolationLevel as IsolationLevel | null) ?? null,
+        category,
+        sub_category: subCategory || 'Populares',
+      };
+      if (pickedNewImage && imageUrl) dados.images = [imageUrl];
+
+      const { error } = await updateProperty(editId, dados);
+      setSaving(false);
+
+      if (error) {
+        Alert.alert('Erro ao atualizar', 'Não foi possível salvar as alterações agora. Tente novamente.');
+        return;
+      }
+
+      Alert.alert('Anúncio atualizado! 🌿', 'As alterações já estão visíveis.', [
+        { text: 'Ver minhas cabanas', onPress: () => router.replace('/my-cabins') },
+      ]);
+      return;
+    }
+
+    const { data: property, error } = await createProperty({
+      owner_id: user.id,
       title: title.trim(),
+      description: description.trim(),
       location: location.trim(),
       price: parseFloat(price) || 0,
-      description: description.trim(),
-      imageUri,
-      isolationLevel,
+      isolation_level: (isolationLevel as IsolationLevel | null) ?? null,
       category,
-      subCategory: subCategory || 'Populares',
+      sub_category: subCategory || 'Populares',
+      images: imageUrl ? [imageUrl] : [],
+      amenities: [],
+      // status omitido de propósito - o banco usa o default 'pendente'
+      // (properties.status NOT NULL DEFAULT 'pendente', schema.sql).
     });
-    Alert.alert('Anúncio publicado! 🌿', 'Sua cabana já está visível no explorar.', [
-      { text: 'Ver minhas cabanas', onPress: () => router.replace('/my-cabins') },
-      { text: 'OK', onPress: () => router.back() },
-    ]);
+
+    setSaving(false);
+
+    if (error || !property) {
+      console.log('[create-listing] createProperty falhou, salvando local ->', error);
+      saveLocally();
+      Alert.alert(
+        'Salvo só neste aparelho',
+        'Não foi possível publicar no servidor agora, mas o anúncio já aparece no seu painel.',
+        [{ text: 'Ver minhas cabanas', onPress: () => router.replace('/my-cabins') }]
+      );
+      return;
+    }
+
+    Alert.alert(
+      'Anúncio enviado! 🌿',
+      'Sua cabana foi enviada para aprovação e vai aparecer no explorar assim que for revisada.',
+      [
+        { text: 'Ver minhas cabanas', onPress: () => router.replace('/my-cabins') },
+        { text: 'OK', onPress: () => router.back() },
+      ]
+    );
   };
 
   return (
@@ -100,7 +229,7 @@ export default function CreateListingScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <ChevronLeft size={24} color="#1F2937" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Nova Cabana</Text>
+        <Text style={styles.headerTitle}>{isEditMode ? 'Editar Cabana' : 'Nova Cabana'}</Text>
         <View style={{ width: 24 }} />
       </View>
 
@@ -239,8 +368,16 @@ export default function CreateListingScreen() {
       </ScrollView>
 
       <View style={styles.footer}>
-        <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-          <Text style={styles.saveButtonText}>Publicar Anúncio</Text>
+        <TouchableOpacity
+          style={[styles.saveButton, saving && { opacity: 0.6 }]}
+          onPress={handleSave}
+          disabled={saving}
+        >
+          {saving ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.saveButtonText}>{isEditMode ? 'Salvar Alterações' : 'Publicar Anúncio'}</Text>
+          )}
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>

@@ -1,4 +1,5 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
+import { Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from './AuthContext';
 
@@ -72,6 +73,16 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
     payMethod?: 'pix' | 'card';
     total?: number;
   }) => {
+    // Mesma regra do CONSTRAINT valid_dates (check_out > check_in) que já
+    // existe no banco (supabase/schema.sql) - replicada aqui pro usuário
+    // receber o aviso na hora, sem depender de um round-trip até o Supabase
+    // (e sem quebrar o fluxo local/offline de usuários estáticos, que nem
+    // chega a bater no banco).
+    if (options?.checkIn && options?.checkOut && options.checkOut <= options.checkIn) {
+      Alert.alert('Datas inválidas', 'A data de check-out precisa ser depois da data de check-in.');
+      return;
+    }
+
     const formatDateBR = (date: Date) =>
       `${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getFullYear()}`;
 

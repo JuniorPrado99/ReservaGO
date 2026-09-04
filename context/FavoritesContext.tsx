@@ -2,6 +2,7 @@ import React, { createContext, useState, useContext, useEffect } from 'react';
 import { Alert, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from './AuthContext';
+import { addFavorite, getFavorites, removeFavorite } from '../services/favoriteService';
 
 interface FavoritesContextData {
   favorites: string[];
@@ -19,33 +20,53 @@ export function FavoritesProvider({ children }: { children: React.ReactNode }) {
   const [favorites, setFavorites] = useState<string[]>([]);
   const { user } = useAuth();
 
-  // Carrega favoritos do AsyncStorage quando o usuário loga
+  // Usuário estático (__DEV__) não existe em profiles/auth - fica só no
+  // AsyncStorage, como sempre funcionou.
+  const isStaticUser = !!user?.id && user.id.startsWith('static-');
+
+  // Carrega favoritos quando o usuário loga
   useEffect(() => {
     if (user) {
       loadFavorites();
     } else {
-      // Limpa os favoritos da memória ao deslogar
       setFavorites([]);
     }
-  }, [user]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   const loadFavorites = async () => {
+    // Lê o cache local primeiro - garante algo na tela mesmo offline ou
+    // antes da resposta do Supabase chegar (evita "piscar" lista vazia).
+    let cached: string[] = [];
     try {
       const stored = await AsyncStorage.getItem(`${STORAGE_KEY}:${user?.id}`);
-      if (stored) setFavorites(JSON.parse(stored));
+      if (stored) cached = JSON.parse(stored);
     } catch (e) {
-      console.error('Erro ao carregar favoritos:', e);
+      console.error('Erro ao carregar favoritos do cache:', e);
     }
+    setFavorites(cached);
+
+    if (isStaticUser || !user?.id) return;
+
+    const { data, error } = await getFavorites(user.id);
+    if (error || !data) {
+      console.log('[favorites] getFavorites falhou, mantendo cache local ->', error);
+      return;
+    }
+    // Banco é a fonte de verdade quando online - substitui o cache e
+    // regrava o AsyncStorage pra ele ficar atualizado offline também.
+    setFavorites(data);
+    saveCache(data);
   };
 
-  const saveFavorites = async (newFavorites: string[]) => {
+  const saveCache = async (newFavorites: string[]) => {
     try {
       await AsyncStorage.setItem(
         `${STORAGE_KEY}:${user?.id}`,
         JSON.stringify(newFavorites)
       );
     } catch (e) {
-      console.error('Erro ao salvar favoritos:', e);
+      console.error('Erro ao salvar favoritos no cache:', e);
     }
   };
 
@@ -63,12 +84,24 @@ export function FavoritesProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    const updated = favorites.includes(id)
+    const isRemoving = favorites.includes(id);
+    const updated = isRemoving
       ? favorites.filter(favId => favId !== id)
       : [...favorites, id];
 
+    // Otimista: atualiza estado + cache local na hora, funciona offline e
+    // fica responsivo mesmo esperando a resposta do Supabase.
     setFavorites(updated);
-    saveFavorites(updated);
+    saveCache(updated);
+
+    if (isStaticUser) return;
+
+    const remoteCall = isRemoving ? removeFavorite(user.id, id) : addFavorite(user.id, id);
+    remoteCall.then(({ error }) => {
+      if (error) {
+        console.log('[favorites] sincronizar com o Supabase falhou, mantendo só local ->', error);
+      }
+    });
   };
 
   return (

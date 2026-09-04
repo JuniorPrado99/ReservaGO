@@ -1,26 +1,15 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../context/AuthContext';
-import { User, Home, ShieldCheck } from 'lucide-react-native';
+import { User, Home } from 'lucide-react-native';
 
 export default function SelectRoleScreen() {
   const router = useRouter();
   const { updateRole, user } = useAuth();
   const [loading, setLoading] = useState(false);
-  const [adminVisible, setAdminVisible] = useState(false);
-  const [clickCount, setClickCount] = useState(0);
 
-  const handleAdminUnlock = () => {
-    const newCount = clickCount + 1;
-    setClickCount(newCount);
-    if (newCount === 10) {
-      setAdminVisible(true);
-      Alert.alert('Modo Desenvolvedor', 'Acesso administrative liberado para esta sessão.');
-    }
-  };
-
-  const handleSelection = async (role: 'hospede' | 'anfitriao' | 'admin') => {
+  const handleSelection = async (role: 'hospede' | 'anfitriao') => {
     setLoading(true);
     await updateRole(role);
     setLoading(false);
@@ -29,13 +18,11 @@ export default function SelectRoleScreen() {
 
   return (
     <View style={styles.container}>
-      <TouchableOpacity onPress={handleAdminUnlock} activeOpacity={1}>
-        <Text style={styles.title}>Como você prefere usar o app?</Text>
-      </TouchableOpacity>
+      <Text style={styles.title}>Como você prefere usar o app?</Text>
       <Text style={styles.subtitle}>
         Olá{user?.name ? `, ${user.name.split(' ')[0]}` : ''}! Escolha seu perfil para começar.
       </Text>
-      
+
       <TouchableOpacity style={styles.card} onPress={() => handleSelection('hospede')} disabled={loading}>
         <User size={32} color="#2D5A27" />
         <View style={styles.cardText}>
@@ -51,13 +38,6 @@ export default function SelectRoleScreen() {
           <Text style={styles.cardSub}>Quero anunciar meu imóvel e ganhar dinheiro.</Text>
         </View>
       </TouchableOpacity>
-
-      {adminVisible && (
-        <TouchableOpacity style={[styles.card, styles.adminCard]} onPress={() => handleSelection('admin')} disabled={loading}>
-          <ShieldCheck size={24} color="#6B7280" />
-          <Text style={styles.adminText}>Acesso Admin</Text>
-        </TouchableOpacity>
-      )}
 
       {loading && (
         <View style={styles.loadingOverlay}>
@@ -77,8 +57,6 @@ const styles = StyleSheet.create({
   cardText: { marginLeft: 15 },
   cardTitle: { fontSize: 18, fontWeight: 'bold' },
   cardSub: { fontSize: 14, color: '#6B7280' },
-  adminCard: { marginTop: 30, opacity: 0.7, backgroundColor: '#fff', borderStyle: 'dashed' },
-  adminText: { marginLeft: 10, color: '#6B7280', fontWeight: '500' },
   loadingOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(255,255,255,0.85)', justifyContent: 'center', alignItems: 'center', gap: 12 },
   loadingText: { color: '#2D5A27', fontWeight: '600', fontSize: 15 }
 });

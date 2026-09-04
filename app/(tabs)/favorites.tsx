@@ -6,10 +6,10 @@ import { useRouter } from 'expo-router';
 
 export default function FavoritesScreen() {
   const { favorites } = useFavorites();
-  const { allProperties = [] } = useListings() || {}; // ✅ Resgatando dados sincronizados com o Supabase
+  const { allProperties = [] } = useListings() || {};
   const router = useRouter();
-  
-  const favoriteItems = allProperties.filter(item => favorites.includes(item.id));
+
+  const favoriteItems = allProperties.filter((item) => favorites.includes(item.id));
 
   return (
     <View style={styles.container}>
@@ -68,5 +68,5 @@ const styles = StyleSheet.create({
   emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 },
   emptyIcon: { fontSize: 50, marginBottom: 20, opacity: 0.2 },
   emptyText: { fontSize: 20, fontWeight: 'bold', color: '#374151', textAlign: 'center' },
-  emptySub: { fontSize: 15, color: '#6B7280', textAlign: 'center', marginTop: 10, lineHeight: 22 }
+  emptySub: { fontSize: 15, color: '#6B7280', textAlign: 'center', marginTop: 10, lineHeight: 22 },
 });
