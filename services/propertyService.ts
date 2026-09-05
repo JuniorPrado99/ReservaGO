@@ -103,6 +103,22 @@ export async function uploadPropertyImage(uri: string, ownerId: string): Promise
   }
 }
 
+/**
+ * Marca/desmarca uma cabana como destaque (properties.featured, já existe no
+ * schema - "destaque no admin", nunca tinha sido exposta por nenhum service).
+ * Mesma RLS de approveProperty (properties_admin_update: só admin edita
+ * cabana de outro dono).
+ */
+export async function setFeatured(id: string, featured: boolean): Promise<ServiceResult<Property>> {
+  const { data, error } = await supabase
+    .from('properties')
+    .update({ featured })
+    .eq('id', id)
+    .select()
+    .single();
+  return toResult(data, error);
+}
+
 export async function approveProperty(id: string, aprovado: boolean): Promise<ServiceResult<Property>> {
   // cabin_status não tem um valor "rejeitado" dedicado - usamos 'ativo' pra
   // aprovar e 'inativo' pra reprovar (RLS properties_admin_update permite

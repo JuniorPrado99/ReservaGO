@@ -11,7 +11,7 @@ jest.mock('@supabase/supabase-js', () => ({
 }));
 
 import { supabase } from '../../lib/supabase';
-import { approveProperty, getPropertiesByHost, getPropertyById, getProperties, uploadPropertyImage } from '../propertyService';
+import { approveProperty, getPropertiesByHost, getPropertyById, getProperties, setFeatured, uploadPropertyImage } from '../propertyService';
 
 /** Builder encadeável e "thenable" - cobre tanto `await query.eq(...)` quanto `await query.select().single()`. */
 function makeBuilder(result: { data: any; error: any }): any {
@@ -105,6 +105,27 @@ describe('propertyService.approveProperty', () => {
     await approveProperty('p1', false);
 
     expect(builder.update).toHaveBeenCalledWith({ status: 'inativo' });
+  });
+});
+
+describe('propertyService.setFeatured', () => {
+  it('featured=true grava { featured: true }', async () => {
+    const builder = makeBuilder({ data: { id: 'p1', featured: true }, error: null });
+    mockFrom.mockReturnValue(builder);
+
+    await setFeatured('p1', true);
+
+    expect(builder.update).toHaveBeenCalledWith({ featured: true });
+    expect(builder.eq).toHaveBeenCalledWith('id', 'p1');
+  });
+
+  it('featured=false grava { featured: false }', async () => {
+    const builder = makeBuilder({ data: { id: 'p1', featured: false }, error: null });
+    mockFrom.mockReturnValue(builder);
+
+    await setFeatured('p1', false);
+
+    expect(builder.update).toHaveBeenCalledWith({ featured: false });
   });
 });
 
