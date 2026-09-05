@@ -20,6 +20,17 @@ export async function getReviewsByProperty(propertyId: string): Promise<ServiceR
   return toResult(data as unknown as ReviewWithAuthor[] | null, error);
 }
 
+/** Quantas avaliações esse usuário já ESCREVEU (não confundir com a nota das cabanas dele) - usado no card de estatísticas do perfil do hóspede. */
+export async function getReviewCountByAuthor(authorId: string): Promise<ServiceResult<number>> {
+  const { count, error } = await supabase
+    .from('reviews')
+    .select('id', { count: 'exact', head: true })
+    .eq('author_id', authorId);
+
+  if (error) return toResult<number>(null, error);
+  return { data: count ?? 0, error: null };
+}
+
 /** UNIQUE(booking_id, author_id) em reviews (schema.sql linha 221) é a mesma regra checada aqui. */
 export async function hasReviewed(guestId: string, bookingId: string): Promise<ServiceResult<boolean>> {
   const { data, error } = await supabase

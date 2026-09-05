@@ -5,10 +5,10 @@ import {
 
 export type InfoSection = { icon: React.ComponentType<any>; title: string; body: string };
 
-export const PAST_TRIPS = [
-  { id: '1', title: 'Refúgio das Pedras', date: 'Dez 2024', image: 'https://images.unsplash.com/photo-1510798831971-661eb04b3739?w=300&q=80' },
-  { id: '2', title: 'Cabana Suíça', date: 'Out 2024', image: 'https://images.unsplash.com/photo-1542718610-a1d656d1884c?w=300&q=80' },
-];
+// PAST_TRIPS (mock de "Refúgio das Pedras"/"Cabana Suíça") removido - o
+// GuestDashboard agora recebe as viagens concluídas de verdade via prop
+// `pastTrips`, montada em app/(tabs)/profile.tsx a partir de
+// bookingService.getBookingsByGuest (RF-008).
 
 export const ALL_INTERESTS = [
   'Atividades ao ar livre', 'Esportes aquáticos', 'Gastronomia',

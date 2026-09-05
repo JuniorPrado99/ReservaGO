@@ -6,7 +6,7 @@ jest.mock('@supabase/supabase-js', () => ({
 }));
 
 import { supabase } from '../../lib/supabase';
-import { createReview, getReviewsByProperty, hasReviewed } from '../reviewService';
+import { createReview, getReviewCountByAuthor, getReviewsByProperty, hasReviewed } from '../reviewService';
 
 function makeBuilder(result: { data: any; error: any }): any {
   const builder: any = {
@@ -89,5 +89,32 @@ describe('reviewService.hasReviewed', () => {
     const result = await hasReviewed('u1', 'b1');
 
     expect(result).toEqual({ data: false, error: null });
+  });
+});
+
+describe('reviewService.getReviewCountByAuthor', () => {
+  it('devolve a contagem (count exact/head) filtrada por author_id', async () => {
+    mockFrom.mockReturnValue(makeBuilder({ data: null, error: null, count: 3 } as any));
+
+    const result = await getReviewCountByAuthor('u1');
+
+    expect(mockFrom).toHaveBeenCalledWith('reviews');
+    expect(result).toEqual({ data: 3, error: null });
+  });
+
+  it('sem nenhuma review ainda, devolve 0 (não null)', async () => {
+    mockFrom.mockReturnValue(makeBuilder({ data: null, error: null, count: 0 } as any));
+
+    const result = await getReviewCountByAuthor('u1');
+
+    expect(result).toEqual({ data: 0, error: null });
+  });
+
+  it('propaga erro do banco', async () => {
+    mockFrom.mockReturnValue(makeBuilder({ data: null, error: { message: 'falha de conexão' }, count: null } as any));
+
+    const result = await getReviewCountByAuthor('u1');
+
+    expect(result).toEqual({ data: null, error: 'falha de conexão' });
   });
 });

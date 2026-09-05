@@ -1,7 +1,7 @@
 import React from 'react';
 import {
   View, Text, StyleSheet, Image, TouchableOpacity,
-  Modal, ScrollView, TextInput, KeyboardAvoidingView, Platform,
+  Modal, ScrollView, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator,
 } from 'react-native';
 import { X, Camera, Check } from 'lucide-react-native';
 import { ALL_INTERESTS } from './profileContent';
@@ -18,11 +18,13 @@ export type EditProfileModalProps = {
   interests: string[];
   onToggleInterest: (interest: string) => void;
   onSave: () => void;
+  /** true enquanto o upload da foto + o update em profiles estão em andamento (RF-008) - desabilita o botão pra evitar salvar 2x. */
+  saving?: boolean;
 };
 
 export function EditProfileModal({
   visible, onClose, avatar, onPickImage, name, onChangeName,
-  bio, onChangeBio, interests, onToggleInterest, onSave,
+  bio, onChangeBio, interests, onToggleInterest, onSave, saving = false,
 }: EditProfileModalProps) {
   return (
     <Modal visible={visible} animationType="slide" transparent>
@@ -77,8 +79,16 @@ export function EditProfileModal({
               })}
             </View>
 
-            <TouchableOpacity style={styles.saveBtn} onPress={onSave}>
-              <Text style={styles.saveBtnText}>Salvar Alterações</Text>
+            <TouchableOpacity
+              style={[styles.saveBtn, saving && styles.saveBtnDisabled]}
+              onPress={onSave}
+              disabled={saving}
+            >
+              {saving ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.saveBtnText}>Salvar Alterações</Text>
+              )}
             </TouchableOpacity>
           </ScrollView>
         </KeyboardAvoidingView>
@@ -118,5 +128,6 @@ const styles = StyleSheet.create({
   interestEditChipText: { fontSize: 14, color: '#4B5563', fontWeight: '500' },
   interestEditChipTextActive: { color: '#fff', fontWeight: 'bold' },
   saveBtn: { backgroundColor: '#2D5A27', padding: 18, borderRadius: 14, alignItems: 'center', marginTop: 10, marginBottom: 30 },
+  saveBtnDisabled: { opacity: 0.6 },
   saveBtnText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
 });

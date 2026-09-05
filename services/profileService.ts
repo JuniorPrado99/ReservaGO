@@ -38,6 +38,34 @@ export async function updateRole(role: UserRole): Promise<ServiceResult<Profile>
   return toResult(data as Profile | null, error);
 }
 
+/**
+ * Envia a foto (uri local do expo-image-picker) pro bucket "avatars" do
+ * Storage (schema.sql, público) e devolve a URL pública. Mesmo padrão de
+ * services/propertyService.ts:uploadPropertyImage - fetch(uri).blob(), sem
+ * precisar de expo-file-system. Caminho `${userId}/timestamp.ext` pra bater
+ * com a policy de storage esperada (dono só grava dentro da própria pasta -
+ * ver supabase/migrations/003_avatars_storage_policies.sql).
+ */
+export async function uploadAvatar(uri: string, userId: string): Promise<ServiceResult<string>> {
+  try {
+    const response = await fetch(uri);
+    const blob = await response.blob();
+    const fileExt = uri.split('.').pop()?.split('?')[0]?.toLowerCase() || 'jpg';
+    const path = `${userId}/${Date.now()}.${fileExt}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('avatars')
+      .upload(path, blob, { contentType: `image/${fileExt}`, upsert: false });
+
+    if (uploadError) return { data: null, error: uploadError.message };
+
+    const { data: publicUrlData } = supabase.storage.from('avatars').getPublicUrl(path);
+    return { data: publicUrlData.publicUrl, error: null };
+  } catch (err: any) {
+    return { data: null, error: err?.message ?? 'Falha ao enviar imagem.' };
+  }
+}
+
 /** Soft delete - grava profiles.deleted_at, não remove a linha nem o usuário do auth.users. */
 export async function deleteAccount(id: string): Promise<ServiceResult<Profile>> {
   const { data, error } = await supabase
