@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import {
   View, Text, StyleSheet, Image, TouchableOpacity,
-  ScrollView, Alert, ActivityIndicator,
+  ScrollView, Alert,
 } from 'react-native';
 import {
   User, Settings, Bell, ShieldCheck, LogOut,
