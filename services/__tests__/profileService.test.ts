@@ -17,6 +17,14 @@ jest.mock('@supabase/supabase-js', () => ({
   })),
 }));
 
+// uploadAvatar lê o arquivo via expo-file-system (File.arrayBuffer()) -
+// fetch(uri).blob() foi testado ao vivo num Android real e falhou com
+// "Network request failed" no upload pro Storage (ver comentário na função).
+const mockArrayBuffer = jest.fn();
+jest.mock('expo-file-system', () => ({
+  File: jest.fn().mockImplementation(() => ({ arrayBuffer: mockArrayBuffer })),
+}));
+
 import { supabase } from '../../lib/supabase';
 import { updateRole, uploadAvatar } from '../profileService';
 
@@ -64,18 +72,12 @@ describe('profileService.updateRole', () => {
   });
 });
 
-// Mesmo padrão de services/__tests__/propertyService.test.ts:uploadPropertyImage
-// (fetch(uri).blob() -> storage.upload -> getPublicUrl), só que no bucket "avatars".
 describe('profileService.uploadAvatar', () => {
-  const originalFetch = global.fetch;
-
-  afterEach(() => {
-    global.fetch = originalFetch;
+  beforeEach(() => {
+    mockArrayBuffer.mockResolvedValue(new ArrayBuffer(8));
   });
 
-  it('caminho feliz: sobe o blob pro bucket "avatars" e devolve a URL pública', async () => {
-    global.fetch = jest.fn().mockResolvedValue({ blob: () => Promise.resolve('fake-blob') }) as any;
-
+  it('caminho feliz: sobe o ArrayBuffer (File.arrayBuffer()) pro bucket "avatars" e devolve a URL pública', async () => {
     const mockUpload = jest.fn().mockResolvedValue({ error: null });
     const mockGetPublicUrl = jest.fn().mockReturnValue({ data: { publicUrl: 'https://cdn/avatar.jpg' } });
     (supabase.storage.from as jest.Mock).mockReturnValue({ upload: mockUpload, getPublicUrl: mockGetPublicUrl });
@@ -85,14 +87,13 @@ describe('profileService.uploadAvatar', () => {
     expect(supabase.storage.from).toHaveBeenCalledWith('avatars');
     expect(mockUpload).toHaveBeenCalledWith(
       expect.stringContaining('user-1/'),
-      'fake-blob',
+      expect.any(ArrayBuffer),
       expect.objectContaining({ contentType: 'image/jpg' })
     );
     expect(result).toEqual({ data: 'https://cdn/avatar.jpg', error: null });
   });
 
   it('erro no upload não derruba a função - devolve { data: null, error }', async () => {
-    global.fetch = jest.fn().mockResolvedValue({ blob: () => Promise.resolve('fake-blob') }) as any;
     (supabase.storage.from as jest.Mock).mockReturnValue({
       upload: jest.fn().mockResolvedValue({ error: { message: 'bucket cheio' } }),
       getPublicUrl: jest.fn(),

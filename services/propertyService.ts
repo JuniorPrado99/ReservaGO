@@ -1,3 +1,4 @@
+import { File } from 'expo-file-system';
 import { supabase } from '../lib/supabase';
 import { NewProperty, Property, PropertyFilters, ServiceResult, toResult } from './types';
 
@@ -80,19 +81,25 @@ export async function deleteProperty(id: string): Promise<ServiceResult<Property
 
 /**
  * Envia a imagem (uri local do expo-image-picker) pro bucket "properties"
- * do Storage (schema.sql, público) e devolve a URL pública. RN/Expo: lê o
- * arquivo via fetch(uri).blob() - não precisa de expo-file-system pra isso.
+ * do Storage (schema.sql, público) e devolve a URL pública.
+ *
+ * Usa expo-file-system (File.arrayBuffer()) em vez de fetch(uri).blob() -
+ * essa segunda forma foi testada ao vivo num Android real (branch
+ * feature/perfil-admin, upload de foto de perfil - mesmo padrão daqui) e
+ * falhou com "Network request failed" (o polyfill de Blob do fetch do React
+ * Native não lida bem com upload binário pro Storage nesse OS). ArrayBuffer
+ * não passa por esse polyfill e o supabase-js aceita ArrayBuffer direto no
+ * upload.
  */
 export async function uploadPropertyImage(uri: string, ownerId: string): Promise<ServiceResult<string>> {
   try {
-    const response = await fetch(uri);
-    const blob = await response.blob();
     const fileExt = uri.split('.').pop()?.split('?')[0]?.toLowerCase() || 'jpg';
     const path = `${ownerId}/${Date.now()}.${fileExt}`;
+    const arrayBuffer = await new File(uri).arrayBuffer();
 
     const { error: uploadError } = await supabase.storage
       .from('properties')
-      .upload(path, blob, { contentType: `image/${fileExt}`, upsert: false });
+      .upload(path, arrayBuffer, { contentType: `image/${fileExt}`, upsert: false });
 
     if (uploadError) return { data: null, error: uploadError.message };
 
