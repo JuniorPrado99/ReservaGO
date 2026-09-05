@@ -7,6 +7,11 @@
 >
 > As seções 5 e 6 usam a numeração oficial de RF/RNF do documento do TCC
 > (ver `CLAUDE.md`, seção "Requisitos do TCC — numeração oficial").
+>
+> **Atualizado em 2026-09-04** (branch `feature/perfil-admin`): RF-008
+> (editar perfil) fechado — era o único RF ainda não conectado ao Supabase,
+> ver seção 5. Painel admin também ganhou ranking real, histórico de
+> aprovações e destaques reais nessa mesma branch.
 
 ---
 
@@ -21,7 +26,7 @@ ReservaGO/
 │   │   ├── favorites.tsx         # Aba "Favoritos" (Supabase + cache AsyncStorage)
 │   │   ├── bookings.tsx          # Aba "Viagens" — reservas reais + locais (Supabase + fallback)
 │   │   ├── messages.tsx          # Aba "Mensagens" (Supabase + Realtime)
-│   │   └── profile.tsx           # Aba "Perfil" (edição ainda local - RF-008 não conectado)
+│   │   └── profile.tsx           # Aba "Perfil" (edição conectada ao Supabase - RF-008, 04/09/2026)
 │   ├── oauth-callback.tsx        # Callback do fluxo de login com Google (Supabase Auth, PKCE)
 │   ├── login.tsx                 # Login (Google real + fallback estático em __DEV__)
 │   ├── select-role.tsx           # Escolha hóspede/anfitrião (grava via RPC set_own_role)
@@ -155,13 +160,14 @@ via CI) — o pipeline cobre só qualidade de código (tipos + testes).
 | RF-005 | Salvar hospedagens como favoritas | ✅ Conectado ao Supabase | `FavoritesContext` → `services/favoriteService.ts`. AsyncStorage virou cache offline (não mais fonte única) |
 | RF-006 | Enviar e receber mensagens entre hóspedes e anfitriões | ✅ Conectado ao Supabase | `app/(tabs)/messages.tsx` → `messageService` (conversas, histórico, envio, Realtime com dedupe, marca como lida ao abrir) |
 | RF-007 | Fazer login com conta Google | ✅ Conectado ao Supabase, validado de ponta a ponta | `app/login.tsx`, `app/oauth-callback.tsx`, `AuthContext` — Supabase Auth (PKCE) num development build Android real (EAS + emulador). Bug corrigido em 03/09/2026: `exchangeCodeForSession` esperava só o código de autorização, não a URL de retorno inteira — ver `CLAUDE.md`, item 12. Continua verdade que o Expo Go não serve pra esse fluxo (seção 9 do `CLAUDE.md`) — só o dev build funciona |
-| RF-008 | Editar perfil e trocar foto de perfil | ❌ Não conectado | `app/(tabs)/profile.tsx` já tem a UI (modal de edição, seletor de foto via `expo-image-picker`), mas só grava em estado local (`setProfileAvatar`) — nunca chama `profileService.updateProfile()` |
+| RF-008 | Editar perfil e trocar foto de perfil | ✅ Conectado ao Supabase (branch `feature/perfil-admin`, 04/09/2026) | `app/(tabs)/profile.tsx` → `profileService.updateProfile()` grava nome/bio/interesses; foto sobe pro bucket `avatars` via nova `profileService.uploadAvatar()` (mesmo padrão de `uploadPropertyImage`). `AuthContext` passou a carregar `bio/interests/phone/created_at` de `profiles` e ganhou `refreshUser()`. `GuestDashboard` trocou os 3 números fixos ("Avaliação 4.9/Viagens 12/Membro desde 2023", iguais pra qualquer hóspede) por dados reais (avaliações escritas, reservas concluídas, ano de cadastro) |
 | RF-009 | Avaliar hospedagens após estadia | ✅ Conectado ao Supabase | `app/review.tsx`, botão "Avaliar" em `app/(tabs)/bookings.tsx`, reviews reais exibidas em `app/details.tsx` |
-| RF-010 | Administradores gerenciarem denúncias e aprovações de anúncios | ✅ Conectado ao Supabase | `app/admin-dashboard.tsx` → `adminService` — estatísticas, aprovação de anúncios e denúncias reais; ranking de mais reservadas e gerenciador de destaques continuam ilustrativos (sem função de serviço correspondente) |
+| RF-010 | Administradores gerenciarem denúncias e aprovações de anúncios | ✅ Conectado ao Supabase | `app/admin-dashboard.tsx` → `adminService` — estatísticas, aprovação de anúncios e denúncias reais. Ranking de mais reservadas (`getTopProperties`), histórico Aprovadas/Reprovadas e toggle de destaque (`setFeatured`, coluna `properties.featured`) conectados em 04/09/2026 (branch `feature/perfil-admin`) — só a Explorar ainda não *consome* `featured` pro hóspede ver (deliberadamente fora do escopo dessa branch) |
 
-**Resumo**: 9 de 10 conectados de ponta a ponta e validados (RF-007 fechado em 03/09/2026), 1 ainda
-não conectado (RF-008, edição de perfil — `profile.tsx` foi dividido em componentes menores numa
-sessão anterior, mas sem mudar comportamento, então continua local).
+**Resumo**: 10 de 10 requisitos funcionais conectados ao Supabase de ponta a ponta (RF-008 fechado em
+04/09/2026, branch `feature/perfil-admin`, junto com o ranking/histórico/destaques reais do painel
+admin). Pendência conhecida, fora do escopo de RF: a tela Explorar ainda não usa `properties.featured`
+pra destacar cabanas pro hóspede — só o lado admin (marcar/desmarcar) está pronto.
 
 ---
 
