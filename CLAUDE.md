@@ -8,7 +8,7 @@ Este arquivo orienta o Claude Code (e qualquer sessão futura) sobre a estrutura
 
 ReservaGO é um app mobile (Expo + React Native) de reserva de cabanas/hospedagens, tipo Airbnb, com três perfis de usuário: `hospede`, `anfitriao`, `admin`. TCC de 7º período.
 
-**Estado real do projeto (em 21/08/2026):** o front-end estava funcional com dados estáticos/locais, e nenhuma tela usava o Supabase de fato. **Isso mudou depois desta data** — hoje 8 dos 10 requisitos funcionais (RF) já leem/escrevem no Supabase de verdade, através da camada `services/`. Ver `docs/material-tcc.md`, seções 2 e 5, para o status atual tela a tela.
+**Estado real do projeto (em 21/08/2026):** o front-end estava funcional com dados estáticos/locais, e nenhuma tela usava o Supabase de fato. **Isso mudou depois desta data** — hoje **10 de 10** requisitos funcionais (RF) já leem/escrevem no Supabase de verdade, através da camada `services/` (RF-008, o último que faltava, fechado em 04/09/2026 na branch `feature/perfil-admin`). Ver `docs/material-tcc.md`, seções 2 e 5, para o status atual tela a tela.
 
 ---
 

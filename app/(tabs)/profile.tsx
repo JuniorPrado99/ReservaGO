@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import {
   View, Text, StyleSheet, Image, TouchableOpacity,
@@ -14,27 +14,86 @@ import { useNotifications } from '../../context/NotificationContext';
 import { MenuItem } from '../../components/profile/MenuItem';
 import { InfoModal } from '../../components/profile/InfoModal';
 import { EditProfileModal } from '../../components/profile/EditProfileModal';
-import { GuestDashboard } from '../../components/profile/GuestDashboard';
+import { GuestDashboard, PastTrip } from '../../components/profile/GuestDashboard';
 import { PRIVACY_SECTIONS, TERMS_SECTIONS } from '../../components/profile/profileContent';
+import { updateProfile, uploadAvatar } from '../../services/profileService';
+import { getBookingsByGuest } from '../../services/bookingService';
+import { getReviewCountByAuthor } from '../../services/reviewService';
+
+const DEFAULT_AVATAR = 'https://i.pravatar.cc/150?img=11';
+
+const TRIP_MONTHS = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+function formatTripDate(checkIn: string): string {
+  const d = new Date(checkIn);
+  if (Number.isNaN(d.getTime())) return '';
+  return `${TRIP_MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+}
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { user, logout, deleteAccount } = useAuth();
+  const { user, logout, deleteAccount, refreshUser } = useAuth();
   const { unreadCount: UNREAD_NOTIFICATIONS } = useNotifications();
 
   const [isEditModalVisible, setEditModalVisible] = useState(false);
   const [isPrivacyVisible, setPrivacyVisible] = useState(false);
   const [isTermsVisible, setTermsVisible] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
 
-  const [profileName, setProfileName] = useState(user?.name || 'Visitante');
-  const [profileAvatar, setProfileAvatar] = useState(user?.avatar || 'https://i.pravatar.cc/150?img=11');
-  const [profileBio, setProfileBio] = useState('Apaixonado por natureza e lugares calmos. Sempre em busca da próxima fogueira e um bom vinho sob as estrelas.');
-  const [profileInterests, setProfileInterests] = useState(['Atividades ao ar livre', 'Gastronomia', 'Vinho']);
+  // Estado "confirmado" (o que está de fato salvo) vem direto de `user` -
+  // sem cópia local duplicada, pra nunca mostrar um dado editado que não foi
+  // salvo de verdade (era o bug do RF-008: saveProfile só mudava esse estado
+  // local, nunca persistia). tempX aqui é só o rascunho enquanto o modal de
+  // edição está aberto.
+  const [tempName, setTempName] = useState(user?.name ?? '');
+  const [tempAvatar, setTempAvatar] = useState(user?.avatar ?? DEFAULT_AVATAR);
+  const [tempBio, setTempBio] = useState(user?.bio ?? '');
+  const [tempInterests, setTempInterests] = useState<string[]>(user?.interests ?? []);
+  const [avatarChanged, setAvatarChanged] = useState(false);
 
-  const [tempName, setTempName] = useState(profileName);
-  const [tempAvatar, setTempAvatar] = useState(profileAvatar);
-  const [tempBio, setTempBio] = useState(profileBio);
-  const [tempInterests, setTempInterests] = useState(profileInterests);
+  const [guestReviewsCount, setGuestReviewsCount] = useState(0);
+  const [guestTripsCount, setGuestTripsCount] = useState(0);
+  const [guestPastTrips, setGuestPastTrips] = useState<PastTrip[]>([]);
+
+  const isStaticUser = !!user?.id.startsWith('static-');
+
+  // Estatísticas reais do hóspede (RF-008 / item 4 do backlog perfil+admin) -
+  // não roda pro usuário estático de dev (não tem bookings/reviews de
+  // verdade) nem pra quem não é hóspede (GuestDashboard nem aparece).
+  useEffect(() => {
+    if (!user || user.role !== 'hospede' || isStaticUser) {
+      setGuestReviewsCount(0);
+      setGuestTripsCount(0);
+      setGuestPastTrips([]);
+      return;
+    }
+
+    let cancelled = false;
+    Promise.all([getBookingsByGuest(user.id), getReviewCountByAuthor(user.id)]).then(
+      ([bookingsRes, reviewsRes]) => {
+        if (cancelled) return;
+        if (bookingsRes.error) console.log('[profile] getBookingsByGuest falhou ->', bookingsRes.error);
+        if (reviewsRes.error) console.log('[profile] getReviewCountByAuthor falhou ->', reviewsRes.error);
+
+        // getBookingsByGuest já vem ordenado por check_in desc (bookingService.ts)
+        // - as 10 primeiras concluídas do carrossel já são as mais recentes.
+        const completed = (bookingsRes.data ?? []).filter((b) => b.status === 'realizada');
+        setGuestTripsCount(completed.length);
+        setGuestPastTrips(
+          completed.slice(0, 10).map((b) => ({
+            id: b.id,
+            title: b.properties?.title ?? 'Cabana',
+            date: formatTripDate(b.check_in),
+            image: b.properties?.images?.[0] ?? null,
+          }))
+        );
+        setGuestReviewsCount(reviewsRes.data ?? 0);
+      }
+    );
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, user?.role, isStaticUser]);
 
   const pickProfileImage = async () => {
     try {
@@ -49,26 +108,71 @@ export default function ProfileScreen() {
         aspect: [1, 1],
         quality: 0.8,
       });
-      if (!result.canceled) setTempAvatar(result.assets[0].uri);
+      if (!result.canceled) {
+        setTempAvatar(result.assets[0].uri);
+        setAvatarChanged(true);
+      }
     } catch {
       Alert.alert('Erro', 'Ocorreu um problema ao tentar abrir a galeria.');
     }
   };
 
   const openEditModal = () => {
-    setTempName(profileName);
-    setTempAvatar(profileAvatar);
-    setTempBio(profileBio);
-    setTempInterests(profileInterests);
+    if (!user) return;
+    setTempName(user.name);
+    setTempAvatar(user.avatar);
+    setTempBio(user.bio);
+    setTempInterests(user.interests);
+    setAvatarChanged(false);
     setEditModalVisible(true);
   };
 
-  const saveProfile = () => {
-    setProfileName(tempName);
-    setProfileAvatar(tempAvatar);
-    setProfileBio(tempBio);
-    setProfileInterests(tempInterests);
-    setEditModalVisible(false);
+  const saveProfile = async () => {
+    if (!user) return;
+
+    // Login fake de __DEV__ (STATIC_USERS em AuthContext.tsx) não tem linha
+    // em `profiles` - não existe onde persistir isso, mesma ressalva já
+    // aplicada a updateRole/deleteAccount nesse mesmo contexto.
+    if (isStaticUser) {
+      Alert.alert(
+        'Login de desenvolvimento',
+        'Esse login fake (__DEV__) não tem perfil real no banco - a edição não pode ser salva. Entre com o Google pra testar de verdade.'
+      );
+      setEditModalVisible(false);
+      return;
+    }
+
+    setSavingProfile(true);
+    try {
+      let avatarUrl = user.avatar;
+
+      if (avatarChanged) {
+        const { data: uploadedUrl, error: uploadError } = await uploadAvatar(tempAvatar, user.id);
+        if (uploadError || !uploadedUrl) {
+          Alert.alert('Erro ao enviar foto', uploadError ?? 'Tente novamente.');
+          return;
+        }
+        avatarUrl = uploadedUrl;
+      }
+
+      const { error } = await updateProfile(user.id, {
+        name: tempName.trim() || user.name,
+        bio: tempBio,
+        interests: tempInterests,
+        avatar_url: avatarUrl,
+      });
+
+      if (error) {
+        Alert.alert('Erro ao salvar perfil', error);
+        return;
+      }
+
+      await refreshUser();
+      setAvatarChanged(false);
+      setEditModalVisible(false);
+    } finally {
+      setSavingProfile(false);
+    }
   };
 
   const toggleInterest = (interest: string) => {
@@ -103,9 +207,9 @@ export default function ProfileScreen() {
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Perfil</Text>
           <View style={styles.userCard}>
-            <Image source={{ uri: profileAvatar }} style={styles.avatar} />
+            <Image source={{ uri: user.avatar }} style={styles.avatar} />
             <View style={styles.userInfo}>
-              <Text style={styles.userName}>{profileName}</Text>
+              <Text style={styles.userName}>{user.name}</Text>
               <Text style={styles.userEmail}>{user.email}</Text>
               <View style={styles.roleBadge}>
                 <Text style={styles.roleText}>{user.role.toUpperCase()}</Text>
@@ -114,7 +218,16 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        {user.role === 'hospede' && <GuestDashboard bio={profileBio} interests={profileInterests} />}
+        {user.role === 'hospede' && (
+          <GuestDashboard
+            bio={user.bio}
+            interests={user.interests}
+            reviewsCount={guestReviewsCount}
+            tripsCount={guestTripsCount}
+            memberSinceYear={user.memberSince ? new Date(user.memberSince).getFullYear() : null}
+            pastTrips={guestPastTrips}
+          />
+        )}
 
         {(user.role === 'anfitriao' || user.role === 'admin') && (
           <View style={styles.section}>
@@ -213,6 +326,7 @@ export default function ProfileScreen() {
         interests={tempInterests}
         onToggleInterest={toggleInterest}
         onSave={saveProfile}
+        saving={savingProfile}
       />
 
       <InfoModal

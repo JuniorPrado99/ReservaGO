@@ -13,11 +13,20 @@ jest.mock('@supabase/supabase-js', () => ({
       eq: jest.fn().mockReturnThis(),
       single: jest.fn(),
     })),
+    storage: { from: jest.fn() },
   })),
 }));
 
+// uploadAvatar lê o arquivo via expo-file-system (File.arrayBuffer()) -
+// fetch(uri).blob() foi testado ao vivo num Android real e falhou com
+// "Network request failed" no upload pro Storage (ver comentário na função).
+const mockArrayBuffer = jest.fn();
+jest.mock('expo-file-system', () => ({
+  File: jest.fn().mockImplementation(() => ({ arrayBuffer: mockArrayBuffer })),
+}));
+
 import { supabase } from '../../lib/supabase';
-import { updateRole } from '../profileService';
+import { updateRole, uploadAvatar } from '../profileService';
 
 const mockRpc = supabase.rpc as jest.Mock;
 const mockFrom = supabase.from as jest.Mock;
@@ -60,5 +69,38 @@ describe('profileService.updateRole', () => {
     expect(mockRpc).toHaveBeenCalledWith('set_own_role', { new_role: 'hospede' });
     expect(result.data).toBeNull();
     expect(result.error).toBe('Não é permitido definir a própria role como admin');
+  });
+});
+
+describe('profileService.uploadAvatar', () => {
+  beforeEach(() => {
+    mockArrayBuffer.mockResolvedValue(new ArrayBuffer(8));
+  });
+
+  it('caminho feliz: sobe o ArrayBuffer (File.arrayBuffer()) pro bucket "avatars" e devolve a URL pública', async () => {
+    const mockUpload = jest.fn().mockResolvedValue({ error: null });
+    const mockGetPublicUrl = jest.fn().mockReturnValue({ data: { publicUrl: 'https://cdn/avatar.jpg' } });
+    (supabase.storage.from as jest.Mock).mockReturnValue({ upload: mockUpload, getPublicUrl: mockGetPublicUrl });
+
+    const result = await uploadAvatar('file:///foto.jpg', 'user-1');
+
+    expect(supabase.storage.from).toHaveBeenCalledWith('avatars');
+    expect(mockUpload).toHaveBeenCalledWith(
+      expect.stringContaining('user-1/'),
+      expect.any(ArrayBuffer),
+      expect.objectContaining({ contentType: 'image/jpg' })
+    );
+    expect(result).toEqual({ data: 'https://cdn/avatar.jpg', error: null });
+  });
+
+  it('erro no upload não derruba a função - devolve { data: null, error }', async () => {
+    (supabase.storage.from as jest.Mock).mockReturnValue({
+      upload: jest.fn().mockResolvedValue({ error: { message: 'bucket cheio' } }),
+      getPublicUrl: jest.fn(),
+    });
+
+    const result = await uploadAvatar('file:///foto.jpg', 'user-1');
+
+    expect(result).toEqual({ data: null, error: 'bucket cheio' });
   });
 });

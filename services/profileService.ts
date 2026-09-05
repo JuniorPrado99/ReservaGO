@@ -1,3 +1,4 @@
+import { File } from 'expo-file-system';
 import { supabase } from '../lib/supabase';
 import { Profile, ServiceResult, UserRole, toResult } from './types';
 
@@ -36,6 +37,38 @@ export async function updateRole(role: UserRole): Promise<ServiceResult<Profile>
 
   const { data, error } = await supabase.rpc('set_own_role', { new_role: role });
   return toResult(data as Profile | null, error);
+}
+
+/**
+ * Envia a foto (uri local do expo-image-picker) pro bucket "avatars" do
+ * Storage (schema.sql, público) e devolve a URL pública. Caminho
+ * `${userId}/timestamp.ext` pra bater com a policy de storage esperada
+ * (dono só grava dentro da própria pasta - ver
+ * supabase/migrations/003_avatars_storage_policies.sql).
+ *
+ * Usa expo-file-system (File.arrayBuffer()) em vez de fetch(uri).blob() -
+ * essa segunda forma foi testada ao vivo num Android real e falhou com
+ * "Network request failed" (o polyfill de Blob do fetch do React Native não
+ * lida bem com upload binário pro Storage nesse OS). ArrayBuffer não passa
+ * por esse polyfill e o supabase-js aceita ArrayBuffer direto no upload.
+ */
+export async function uploadAvatar(uri: string, userId: string): Promise<ServiceResult<string>> {
+  try {
+    const fileExt = uri.split('.').pop()?.split('?')[0]?.toLowerCase() || 'jpg';
+    const path = `${userId}/${Date.now()}.${fileExt}`;
+    const arrayBuffer = await new File(uri).arrayBuffer();
+
+    const { error: uploadError } = await supabase.storage
+      .from('avatars')
+      .upload(path, arrayBuffer, { contentType: `image/${fileExt}`, upsert: false });
+
+    if (uploadError) return { data: null, error: uploadError.message };
+
+    const { data: publicUrlData } = supabase.storage.from('avatars').getPublicUrl(path);
+    return { data: publicUrlData.publicUrl, error: null };
+  } catch (err: any) {
+    return { data: null, error: err?.message ?? 'Falha ao enviar imagem.' };
+  }
 }
 
 /** Soft delete - grava profiles.deleted_at, não remove a linha nem o usuário do auth.users. */

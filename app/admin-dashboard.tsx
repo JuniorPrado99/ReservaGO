@@ -3,19 +3,20 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIn
 import { useRouter } from 'expo-router';
 import { LayoutDashboard, CheckCircle, XCircle, TrendingUp, Users, Home, ChevronLeft, AlertOctagon, Star, ShieldAlert } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
-import { AdminStats, getPendingProperties, getReports, getStats, resolveReport } from '../services/adminService';
-import { approveProperty } from '../services/propertyService';
-import type { Property as DbProperty, Report } from '../services/types';
+import {
+  AdminStats,
+  archiveReport,
+  getPendingProperties,
+  getReportsWithContext,
+  getStats,
+  getTopProperties,
+  resolveReport,
+  ReportWithContext,
+} from '../services/adminService';
+import { approveProperty, getProperties, setFeatured } from '../services/propertyService';
+import type { Property as DbProperty } from '../services/types';
 
-// Ranking de mais reservadas e o gerenciador de destaques não têm função
-// correspondente em services/ ainda (getStats() traz só contagens gerais) -
-// continuam ilustrativos de propósito, marcados como tal na tela. O resto
-// (estatísticas, aprovações, denúncias) usa dados reais do adminService.
-const topCabins = [
-  { id: '1', name: 'Recanto das Águas', reservations: 145, rating: 4.9 },
-  { id: '2', name: 'Chalé Suíço', reservations: 120, rating: 4.8 },
-  { id: '3', name: 'Cabana Isolada', reservations: 95, rating: 4.7 },
-];
+type ApprovalSubTab = 'pendente' | 'ativo' | 'inativo';
 
 export default function AdminDashboard() {
   const router = useRouter();
@@ -23,13 +24,27 @@ export default function AdminDashboard() {
   const isAdmin = user?.role === 'admin';
 
   const [tab, setTab] = useState<'stats' | 'approvals' | 'reports' | 'highlights'>('stats');
+  const [approvalSubTab, setApprovalSubTab] = useState<ApprovalSubTab>('pendente');
 
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [loadingStats, setLoadingStats] = useState(true);
+
+  const [topProperties, setTopProperties] = useState<DbProperty[]>([]);
+  const [loadingTop, setLoadingTop] = useState(true);
+
   const [pendingCabins, setPendingCabins] = useState<DbProperty[]>([]);
   const [loadingCabins, setLoadingCabins] = useState(true);
-  const [reports, setReports] = useState<Report[]>([]);
+  const [approvedCabins, setApprovedCabins] = useState<DbProperty[]>([]);
+  const [loadingApproved, setLoadingApproved] = useState(false);
+  const [rejectedCabins, setRejectedCabins] = useState<DbProperty[]>([]);
+  const [loadingRejected, setLoadingRejected] = useState(false);
+
+  const [reports, setReports] = useState<ReportWithContext[]>([]);
   const [loadingReports, setLoadingReports] = useState(true);
+
+  const [featuredList, setFeaturedList] = useState<DbProperty[]>([]);
+  const [loadingFeaturedList, setLoadingFeaturedList] = useState(false);
+  const [togglingFeaturedId, setTogglingFeaturedId] = useState<string | null>(null);
 
   const loadStats = () => {
     if (!isAdmin) { setLoadingStats(false); return; }
@@ -38,6 +53,16 @@ export default function AdminDashboard() {
       if (error) console.log('[admin] getStats falhou ->', error);
       setStats(data);
       setLoadingStats(false);
+    });
+  };
+
+  const loadTop = () => {
+    if (!isAdmin) { setLoadingTop(false); return; }
+    setLoadingTop(true);
+    getTopProperties(5).then(({ data, error }) => {
+      if (error) console.log('[admin] getTopProperties falhou ->', error);
+      setTopProperties(data ?? []);
+      setLoadingTop(false);
     });
   };
 
@@ -51,22 +76,70 @@ export default function AdminDashboard() {
     });
   };
 
+  // properties_admin_read (schema.sql) já deixa o admin ler cabana de
+  // qualquer status - reaproveita o mesmo getProperties() público que a
+  // Explorar usa, só passando o status certo.
+  const loadApproved = () => {
+    if (!isAdmin) return;
+    setLoadingApproved(true);
+    getProperties({ status: 'ativo' }).then(({ data, error }) => {
+      if (error) console.log('[admin] getProperties(ativo) falhou ->', error);
+      setApprovedCabins(data ?? []);
+      setLoadingApproved(false);
+    });
+  };
+
+  const loadRejected = () => {
+    if (!isAdmin) return;
+    setLoadingRejected(true);
+    getProperties({ status: 'inativo' }).then(({ data, error }) => {
+      if (error) console.log('[admin] getProperties(inativo) falhou ->', error);
+      setRejectedCabins(data ?? []);
+      setLoadingRejected(false);
+    });
+  };
+
   const loadReports = () => {
     if (!isAdmin) { setLoadingReports(false); return; }
     setLoadingReports(true);
-    getReports().then(({ data, error }) => {
-      if (error) console.log('[admin] getReports falhou ->', error);
+    getReportsWithContext().then(({ data, error }) => {
+      if (error) console.log('[admin] getReportsWithContext falhou ->', error);
       setReports((data ?? []).filter((r) => r.status === 'pendente' || r.status === 'em_analise'));
       setLoadingReports(false);
     });
   };
 
+  const loadFeaturedList = () => {
+    if (!isAdmin) return;
+    setLoadingFeaturedList(true);
+    getProperties({ status: 'ativo' }).then(({ data, error }) => {
+      if (error) console.log('[admin] getProperties(ativo p/ destaques) falhou ->', error);
+      setFeaturedList(data ?? []);
+      setLoadingFeaturedList(false);
+    });
+  };
+
   useEffect(() => {
     loadStats();
+    loadTop();
     loadPending();
     loadReports();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdmin]);
+
+  // Aprovadas/Reprovadas e Destaques só carregam quando o admin de fato abre
+  // essa aba/sub-aba - evita 2 queries extras toda vez que o painel abre.
+  useEffect(() => {
+    if (tab !== 'approvals') return;
+    if (approvalSubTab === 'ativo' && !loadingApproved) loadApproved();
+    if (approvalSubTab === 'inativo' && !loadingRejected) loadRejected();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, approvalSubTab, isAdmin]);
+
+  useEffect(() => {
+    if (tab === 'highlights' && !loadingFeaturedList) loadFeaturedList();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, isAdmin]);
 
   const handleApprove = async (property: DbProperty, aprovado: boolean) => {
     const { error } = await approveProperty(property.id, aprovado);
@@ -77,9 +150,11 @@ export default function AdminDashboard() {
     Alert.alert('Sucesso', `"${property.title}" foi ${aprovado ? 'aprovada' : 'reprovada'}.`);
     loadPending();
     loadStats();
+    loadApproved();
+    loadRejected();
   };
 
-  const handleResolveReport = async (report: Report) => {
+  const handleResolveReport = async (report: ReportWithContext) => {
     const { error } = await resolveReport(report.id, user?.id);
     if (error) {
       Alert.alert('Erro', 'Não foi possível resolver essa denúncia agora. Tente novamente.');
@@ -88,6 +163,27 @@ export default function AdminDashboard() {
     Alert.alert('Denúncia resolvida', 'A denúncia foi marcada como resolvida.');
     loadReports();
     loadStats();
+  };
+
+  const handleArchiveReport = async (report: ReportWithContext) => {
+    const { error } = await archiveReport(report.id, user?.id);
+    if (error) {
+      Alert.alert('Erro', 'Não foi possível arquivar essa denúncia agora. Tente novamente.');
+      return;
+    }
+    loadReports();
+    loadStats();
+  };
+
+  const handleToggleFeatured = async (property: DbProperty) => {
+    setTogglingFeaturedId(property.id);
+    const { error } = await setFeatured(property.id, !property.featured);
+    setTogglingFeaturedId(null);
+    if (error) {
+      Alert.alert('Erro', 'Não foi possível atualizar o destaque agora. Tente novamente.');
+      return;
+    }
+    setFeaturedList((prev) => prev.map((p) => (p.id === property.id ? { ...p, featured: !p.featured } : p)));
   };
 
   // Protege o acesso: só role === 'admin' vê o painel. A garantia de
@@ -173,48 +269,131 @@ export default function AdminDashboard() {
             )}
 
             <Text style={[styles.sectionTitle, { marginTop: 30 }]}>Ranking: Cabanas Mais Usadas</Text>
-            <Text style={styles.mockNotice}>Dados ilustrativos - ranking real ainda não conectado.</Text>
-            {topCabins.map((cabin, index) => (
-              <View key={cabin.id} style={styles.rankingCard}>
-                <View style={styles.rankNumber}><Text style={{ color: '#fff', fontWeight: 'bold' }}>{index + 1}</Text></View>
-                <View style={{ flex: 1, marginLeft: 15 }}>
-                  <Text style={styles.cabinName}>{cabin.name}</Text>
-                  <Text style={styles.cabinHost}>{cabin.reservations} reservas efetuadas</Text>
+            {loadingTop ? (
+              <ActivityIndicator size="large" color="#2D5A27" style={{ marginVertical: 20 }} />
+            ) : topProperties.length === 0 ? (
+              <Text style={styles.emptyText}>Nenhuma cabana com reservas ainda.</Text>
+            ) : (
+              topProperties.map((cabin, index) => (
+                <View key={cabin.id} style={styles.rankingCard}>
+                  <View style={styles.rankNumber}><Text style={{ color: '#fff', fontWeight: 'bold' }}>{index + 1}</Text></View>
+                  <View style={{ flex: 1, marginLeft: 15 }}>
+                    <Text style={styles.cabinName}>{cabin.title}</Text>
+                    <Text style={styles.cabinHost}>
+                      {cabin.bookings_count} reserva{cabin.bookings_count === 1 ? '' : 's'} efetuada{cabin.bookings_count === 1 ? '' : 's'}
+                    </Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Star size={16} color="#F59E0B" fill="#F59E0B" />
+                    <Text style={{ fontWeight: 'bold', marginLeft: 4 }}>{cabin.rating.toFixed(1)}</Text>
+                  </View>
                 </View>
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Star size={16} color="#F59E0B" fill="#F59E0B" />
-                  <Text style={{ fontWeight: 'bold', marginLeft: 4 }}>{cabin.rating}</Text>
-                </View>
-              </View>
-            ))}
+              ))
+            )}
           </View>
         )}
 
         {tab === 'approvals' && (
           <View>
-            <Text style={styles.sectionTitle}>Anúncios Pendentes ({pendingCabins.length})</Text>
-            {loadingCabins ? (
-              <ActivityIndicator size="large" color="#2D5A27" style={{ marginVertical: 20 }} />
-            ) : pendingCabins.length === 0 ? (
-              <Text style={styles.emptyText}>Nenhum anúncio aguardando aprovação.</Text>
-            ) : (
-              pendingCabins.map((cabin) => (
-                <View key={cabin.id} style={styles.cabinCard}>
-                  <View style={styles.cabinInfo}>
-                    <Text style={styles.cabinName}>{cabin.title}</Text>
-                    <Text style={styles.cabinHost}>{cabin.location || 'Localização não informada'}</Text>
-                    <Text style={styles.cabinPrice}>R$ {cabin.price}/noite</Text>
-                  </View>
-                  <View style={styles.actionButtons}>
-                    <TouchableOpacity onPress={() => handleApprove(cabin, true)}>
-                      <CheckCircle size={32} color="#10B981" />
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={() => handleApprove(cabin, false)}>
-                      <XCircle size={32} color="#EF4444" />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              ))
+            <View style={styles.subTabBar}>
+              <TouchableOpacity
+                style={[styles.subTab, approvalSubTab === 'pendente' && styles.subTabActive]}
+                onPress={() => setApprovalSubTab('pendente')}
+              >
+                <Text style={[styles.subTabText, approvalSubTab === 'pendente' && styles.subTabTextActive]}>Pendentes</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.subTab, approvalSubTab === 'ativo' && styles.subTabActive]}
+                onPress={() => setApprovalSubTab('ativo')}
+              >
+                <Text style={[styles.subTabText, approvalSubTab === 'ativo' && styles.subTabTextActive]}>Aprovadas</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.subTab, approvalSubTab === 'inativo' && styles.subTabActive]}
+                onPress={() => setApprovalSubTab('inativo')}
+              >
+                <Text style={[styles.subTabText, approvalSubTab === 'inativo' && styles.subTabTextActive]}>Reprovadas</Text>
+              </TouchableOpacity>
+            </View>
+
+            {approvalSubTab === 'pendente' && (
+              <View>
+                <Text style={styles.sectionTitle}>Anúncios Pendentes ({pendingCabins.length})</Text>
+                {loadingCabins ? (
+                  <ActivityIndicator size="large" color="#2D5A27" style={{ marginVertical: 20 }} />
+                ) : pendingCabins.length === 0 ? (
+                  <Text style={styles.emptyText}>Nenhum anúncio aguardando aprovação.</Text>
+                ) : (
+                  pendingCabins.map((cabin) => (
+                    <View key={cabin.id} style={styles.cabinCard}>
+                      <View style={styles.cabinInfo}>
+                        <Text style={styles.cabinName}>{cabin.title}</Text>
+                        <Text style={styles.cabinHost}>{cabin.location || 'Localização não informada'}</Text>
+                        <Text style={styles.cabinPrice}>R$ {cabin.price}/noite</Text>
+                      </View>
+                      <View style={styles.actionButtons}>
+                        <TouchableOpacity onPress={() => handleApprove(cabin, true)}>
+                          <CheckCircle size={32} color="#10B981" />
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={() => handleApprove(cabin, false)}>
+                          <XCircle size={32} color="#EF4444" />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ))
+                )}
+              </View>
+            )}
+
+            {approvalSubTab === 'ativo' && (
+              <View>
+                <Text style={styles.sectionTitle}>Cabanas Aprovadas ({approvedCabins.length})</Text>
+                {loadingApproved ? (
+                  <ActivityIndicator size="large" color="#2D5A27" style={{ marginVertical: 20 }} />
+                ) : approvedCabins.length === 0 ? (
+                  <Text style={styles.emptyText}>Nenhuma cabana aprovada ainda.</Text>
+                ) : (
+                  approvedCabins.map((cabin) => (
+                    <View key={cabin.id} style={styles.cabinCard}>
+                      <View style={styles.cabinInfo}>
+                        <Text style={styles.cabinName}>{cabin.title}</Text>
+                        <Text style={styles.cabinHost}>{cabin.location || 'Localização não informada'}</Text>
+                        <Text style={styles.cabinPrice}>R$ {cabin.price}/noite</Text>
+                      </View>
+                      <TouchableOpacity onPress={() => handleApprove(cabin, false)}>
+                        <XCircle size={28} color="#EF4444" />
+                      </TouchableOpacity>
+                    </View>
+                  ))
+                )}
+              </View>
+            )}
+
+            {approvalSubTab === 'inativo' && (
+              <View>
+                <Text style={styles.sectionTitle}>Reprovadas / Inativas ({rejectedCabins.length})</Text>
+                <Text style={styles.mockNotice}>
+                  "Inativo" também é usado quando o próprio anfitrião exclui a cabana (schema não distingue os dois casos) - essa lista pode misturar reprovadas pelo admin com excluídas pelo dono.
+                </Text>
+                {loadingRejected ? (
+                  <ActivityIndicator size="large" color="#2D5A27" style={{ marginVertical: 20 }} />
+                ) : rejectedCabins.length === 0 ? (
+                  <Text style={styles.emptyText}>Nenhuma cabana reprovada/inativa.</Text>
+                ) : (
+                  rejectedCabins.map((cabin) => (
+                    <View key={cabin.id} style={styles.cabinCard}>
+                      <View style={styles.cabinInfo}>
+                        <Text style={styles.cabinName}>{cabin.title}</Text>
+                        <Text style={styles.cabinHost}>{cabin.location || 'Localização não informada'}</Text>
+                        <Text style={styles.cabinPrice}>R$ {cabin.price}/noite</Text>
+                      </View>
+                      <TouchableOpacity onPress={() => handleApprove(cabin, true)}>
+                        <CheckCircle size={28} color="#10B981" />
+                      </TouchableOpacity>
+                    </View>
+                  ))
+                )}
+              </View>
             )}
           </View>
         )}
@@ -229,12 +408,24 @@ export default function AdminDashboard() {
             ) : (
               reports.map((report) => (
                 <View key={report.id} style={styles.reportCard}>
-                  <Text style={{ fontWeight: 'bold', color: '#1F2937', fontSize: 16 }}>Motivo</Text>
+                  {!!report.propertyTitle && <Text style={styles.reportTarget}>🏠 Cabana: {report.propertyTitle}</Text>}
+                  {!!report.reportedUserName && (
+                    <Text style={styles.reportTarget}>👤 Usuário denunciado: {report.reportedUserName}</Text>
+                  )}
+                  <Text style={styles.reportReporter}>Denunciado por {report.reporterName ?? 'usuário removido'}</Text>
+
+                  <Text style={{ fontWeight: 'bold', color: '#1F2937', fontSize: 16, marginTop: 8 }}>Motivo</Text>
                   <Text style={{ color: '#EF4444', fontStyle: 'italic', marginVertical: 10 }}>"{report.reason}"</Text>
                   {!!report.details && <Text style={{ color: '#4B5563', marginBottom: 10 }}>{report.details}</Text>}
-                  <TouchableOpacity style={styles.banBtn} onPress={() => handleResolveReport(report)}>
-                    <Text style={styles.banText}>Marcar como resolvida</Text>
-                  </TouchableOpacity>
+
+                  <View style={{ flexDirection: 'row', gap: 10 }}>
+                    <TouchableOpacity style={[styles.banBtn, { flex: 1 }]} onPress={() => handleResolveReport(report)}>
+                      <Text style={styles.banText}>Marcar como resolvida</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.archiveBtn, { flex: 1 }]} onPress={() => handleArchiveReport(report)}>
+                      <Text style={styles.archiveText}>Arquivar</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
               ))
             )}
@@ -243,24 +434,27 @@ export default function AdminDashboard() {
 
         {tab === 'highlights' && (
           <View>
-            <Text style={styles.sectionTitle}>Gerenciar Tela Explorar</Text>
-            <Text style={styles.mockNotice}>Ilustrativo - ainda não conectado a nenhuma tabela real.</Text>
-            <Text style={{ color: '#6B7280', marginBottom: 20 }}>Altere como os carrosséis de cabanas aparecem para os usuários na tela principal.</Text>
-
-            <View style={styles.carrosselSetting}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.settingTitle}>Modo de Exibição</Text>
-                <Text style={styles.settingDesc}>Definir cabanas em destaque manualmente ou deixar o sistema escolher baseado em popularidade.</Text>
-              </View>
-            </View>
-
-            <TouchableOpacity style={styles.settingBtnActive}>
-               <Text style={{ color: '#fff', fontWeight: 'bold', textAlign: 'center' }}>Automático (Baseado no Ranking)</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.settingBtnOutline}>
-               <Text style={{ color: '#2D5A27', fontWeight: 'bold', textAlign: 'center' }}>Manual (Escolher Cabanas)</Text>
-            </TouchableOpacity>
+            <Text style={styles.sectionTitle}>Destaques da Explorar</Text>
+            <Text style={{ color: '#6B7280', marginBottom: 20 }}>
+              Marque quais cabanas ficam em destaque (properties.featured). A tela Explorar ainda não lê esse campo pra decidir o que mostrar - isso aqui é só o controle do lado do admin; a próxima etapa é a Explorar consumir isso.
+            </Text>
+            {loadingFeaturedList ? (
+              <ActivityIndicator size="large" color="#2D5A27" style={{ marginVertical: 20 }} />
+            ) : featuredList.length === 0 ? (
+              <Text style={styles.emptyText}>Nenhuma cabana aprovada ainda pra destacar.</Text>
+            ) : (
+              featuredList.map((cabin) => (
+                <View key={cabin.id} style={styles.cabinCard}>
+                  <View style={styles.cabinInfo}>
+                    <Text style={styles.cabinName}>{cabin.title}</Text>
+                    <Text style={styles.cabinHost}>{cabin.location || 'Localização não informada'}</Text>
+                  </View>
+                  <TouchableOpacity onPress={() => handleToggleFeatured(cabin)} disabled={togglingFeaturedId === cabin.id}>
+                    <Star size={28} color="#F59E0B" fill={cabin.featured ? '#F59E0B' : 'none'} />
+                  </TouchableOpacity>
+                </View>
+              ))
+            )}
           </View>
         )}
       </ScrollView>
@@ -285,6 +479,12 @@ const styles = StyleSheet.create({
   tabText: { fontSize: 14, color: '#9CA3AF', fontWeight: '600' },
   activeTabText: { color: '#2D5A27' },
 
+  subTabBar: { flexDirection: 'row', backgroundColor: '#F3F4F6', borderRadius: 12, padding: 4, marginBottom: 20 },
+  subTab: { flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: 'center' },
+  subTabActive: { backgroundColor: '#fff', shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 3, elevation: 1 },
+  subTabText: { fontSize: 13, fontWeight: '600', color: '#9CA3AF' },
+  subTabTextActive: { color: '#2D5A27' },
+
   sectionTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 20, color: '#374151' },
   mockNotice: { fontSize: 12, color: '#9CA3AF', fontStyle: 'italic', marginTop: -14, marginBottom: 14 },
   emptyText: { color: '#9CA3AF', fontSize: 14, textAlign: 'center', paddingVertical: 30 },
@@ -305,12 +505,10 @@ const styles = StyleSheet.create({
   actionButtons: { flexDirection: 'row', gap: 15 },
 
   reportCard: { backgroundColor: '#FEF2F2', padding: 20, borderRadius: 15, borderWidth: 1, borderColor: '#FEE2E2', marginBottom: 15 },
+  reportTarget: { fontSize: 13, color: '#1F2937', fontWeight: '600', marginBottom: 4 },
+  reportReporter: { fontSize: 12, color: '#6B7280', fontStyle: 'italic' },
   banBtn: { backgroundColor: '#EF4444', padding: 12, borderRadius: 10, alignItems: 'center', marginTop: 10 },
   banText: { color: '#fff', fontWeight: 'bold' },
-
-  carrosselSetting: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', padding: 20, borderRadius: 15, borderWidth: 1, borderColor: '#EEE', marginBottom: 20 },
-  settingTitle: { fontWeight: 'bold', fontSize: 16 },
-  settingDesc: { color: '#6B7280', fontSize: 13, marginTop: 5 },
-  settingBtnActive: { backgroundColor: '#2D5A27', padding: 15, borderRadius: 12, marginBottom: 10 },
-  settingBtnOutline: { borderWidth: 1, borderColor: '#2D5A27', padding: 15, borderRadius: 12 },
+  archiveBtn: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#D1D5DB', padding: 12, borderRadius: 10, alignItems: 'center', marginTop: 10 },
+  archiveText: { color: '#4B5563', fontWeight: 'bold' },
 });

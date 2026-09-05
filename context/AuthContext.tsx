@@ -18,10 +18,18 @@ export interface AppUser {
   email: string;
   role: UserRole;
   avatar: string;
+  bio: string;
+  interests: string[];
+  phone: string | null;
+  /** ISO de profiles.created_at - null pro usuário estático de dev (não existe linha em profiles). */
+  memberSince: string | null;
 }
 
 const DEFAULT_AVATAR = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200';
 
+// Usuários estáticos de dev (__DEV__) não têm linha em `profiles` - por isso
+// bio/interests/phone/memberSince ficam vazios/null aqui, sempre. Editar
+// perfil pra esses continua só em memória (ver comentário em profile.tsx).
 const STATIC_USERS: { email: string; password: string; user: AppUser }[] = [
   {
     email: 'admin@reservago.com',
@@ -32,6 +40,10 @@ const STATIC_USERS: { email: string; password: string; user: AppUser }[] = [
       email: 'admin@reservago.com',
       role: 'admin',
       avatar: DEFAULT_AVATAR,
+      bio: '',
+      interests: [],
+      phone: null,
+      memberSince: null,
     },
   },
   {
@@ -43,6 +55,10 @@ const STATIC_USERS: { email: string; password: string; user: AppUser }[] = [
       email: 'hospede@reservago.com',
       role: 'hospede',
       avatar: DEFAULT_AVATAR,
+      bio: '',
+      interests: [],
+      phone: null,
+      memberSince: null,
     },
   },
   {
@@ -54,6 +70,10 @@ const STATIC_USERS: { email: string; password: string; user: AppUser }[] = [
       email: 'anfitriao@reservago.com',
       role: 'anfitriao',
       avatar: DEFAULT_AVATAR,
+      bio: '',
+      interests: [],
+      phone: null,
+      memberSince: null,
     },
   },
 ];
@@ -66,6 +86,8 @@ interface AuthContextData {
   logout: () => Promise<void>;
   updateRole: (role: UserRole) => Promise<void>;
   deleteAccount: () => Promise<void>;
+  /** Recarrega profiles pra sessão atual - usado por quem grava direto no banco (ex.: salvar edição de perfil) pra refletir o dado confirmado sem esperar um evento do onAuthStateChange. No-op pra usuário estático/sem sessão. */
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextData>({} as AuthContextData);
@@ -82,7 +104,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     console.log('[auth] carregando profile para usuário', activeSession.user.id);
     const { data: profile, error } = await supabase
       .from('profiles')
-      .select('id, name, email, avatar_url, role')
+      .select('id, name, email, avatar_url, role, bio, interests, phone, created_at')
       .eq('id', activeSession.user.id)
       .single();
 
@@ -96,6 +118,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         email: activeSession.user.email ?? '',
         role: 'hospede',
         avatar: activeSession.user.user_metadata?.avatar_url ?? DEFAULT_AVATAR,
+        bio: '',
+        interests: [],
+        phone: null,
+        memberSince: null,
       });
       console.log('[auth] user (fallback) definido no estado');
       return;
@@ -107,6 +133,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       email: profile.email,
       role: (profile.role as UserRole) ?? 'hospede',
       avatar: profile.avatar_url || DEFAULT_AVATAR,
+      bio: profile.bio ?? '',
+      interests: profile.interests ?? [],
+      phone: profile.phone ?? null,
+      memberSince: profile.created_at ?? null,
     });
     console.log('[auth] user definido no estado a partir do profile ->', profile.email, profile.role);
   };
@@ -248,9 +278,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     );
   };
 
+  const refreshUser = async () => {
+    if (!session) return;
+    await loadProfileForSession(session);
+  };
+
   return (
     <AuthContext.Provider
-      value={{ user, session, loading, login, logout, updateRole, deleteAccount }}
+      value={{ user, session, loading, login, logout, updateRole, deleteAccount, refreshUser }}
     >
       {children}
     </AuthContext.Provider>

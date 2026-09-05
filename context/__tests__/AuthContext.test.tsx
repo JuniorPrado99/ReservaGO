@@ -234,4 +234,96 @@ describe('AuthContext', () => {
     expect(mockSignOut).not.toHaveBeenCalled();
     expect(result.current.user?.id).toBe('real-user-uuid');
   });
+
+  it('carrega bio/interests/phone/memberSince do profile quando a leitura tem sucesso (RF-008)', async () => {
+    mockOnAuthStateChange.mockImplementation((callback: (event: string, session: any) => void) => {
+      callback('SIGNED_IN', {
+        user: { id: 'real-user-uuid', email: 'junior@gmail.com', user_metadata: {} },
+      });
+      return { data: { subscription: { unsubscribe: jest.fn() } } };
+    });
+    (supabase.from as jest.Mock).mockReturnValueOnce({
+      select: jest.fn().mockReturnThis(),
+      eq: jest.fn().mockReturnThis(),
+      single: jest.fn().mockResolvedValue({
+        data: {
+          id: 'real-user-uuid',
+          name: 'Junior',
+          email: 'junior@gmail.com',
+          avatar_url: 'https://cdn/avatar.jpg',
+          role: 'hospede',
+          bio: 'Gosto de trilhas',
+          interests: ['Trilhas', 'Praia'],
+          phone: '62999999999',
+          created_at: '2024-03-10T00:00:00.000Z',
+        },
+        error: null,
+      }),
+    });
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.user).toMatchObject({
+      bio: 'Gosto de trilhas',
+      interests: ['Trilhas', 'Praia'],
+      phone: '62999999999',
+      memberSince: '2024-03-10T00:00:00.000Z',
+    });
+  });
+
+  it('refreshUser recarrega o profile da sessão atual (ex.: depois de salvar edição de perfil em outra tela)', async () => {
+    mockOnAuthStateChange.mockImplementation((callback: (event: string, session: any) => void) => {
+      callback('SIGNED_IN', {
+        user: { id: 'real-user-uuid', email: 'junior@gmail.com', user_metadata: {} },
+      });
+      return { data: { subscription: { unsubscribe: jest.fn() } } };
+    });
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    (supabase.from as jest.Mock).mockReturnValueOnce({
+      select: jest.fn().mockReturnThis(),
+      eq: jest.fn().mockReturnThis(),
+      single: jest.fn().mockResolvedValue({
+        data: {
+          id: 'real-user-uuid',
+          name: 'Nome Atualizado',
+          email: 'junior@gmail.com',
+          avatar_url: null,
+          role: 'hospede',
+          bio: 'bio nova',
+          interests: [],
+          phone: null,
+          created_at: '2024-01-01T00:00:00.000Z',
+        },
+        error: null,
+      }),
+    });
+
+    await act(async () => {
+      await result.current.refreshUser();
+    });
+
+    expect(result.current.user?.name).toBe('Nome Atualizado');
+    expect(result.current.user?.bio).toBe('bio nova');
+  });
+
+  it('refreshUser não consulta o banco quando não há sessão ativa (usuário estático de dev)', async () => {
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await result.current.login('hospede@reservago.com', '1234');
+    });
+
+    const fromCallsBefore = (supabase.from as jest.Mock).mock.calls.length;
+
+    await act(async () => {
+      await result.current.refreshUser();
+    });
+
+    expect((supabase.from as jest.Mock).mock.calls.length).toBe(fromCallsBefore);
+  });
 });
