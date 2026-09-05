@@ -7,6 +7,7 @@ import { Calendar, MapPin, ChevronRight, X, CreditCard, Star } from 'lucide-reac
 import { useRouter } from 'expo-router';
 import { cancelBooking as cancelBookingRemote, getBookingsByGuest } from '../../services/bookingService';
 import type { BookingWithProperty } from '../../services/types';
+import { formatCurrency } from '../../lib/format';
 
 // Linha unificada de exibição - pode vir de uma reserva real (Supabase,
 // com id de verdade) ou de uma reserva local (BookingContext/AsyncStorage,
@@ -185,7 +186,7 @@ export default function BookingsScreen() {
             <View style={styles.detailsRow}>
               <CreditCard size={12} color="#6B7280" />
               <Text style={styles.detailText}>
-                {item.payMethod === 'pix' ? 'PIX' : 'Cartão'} · R$ {Number(item.total).toFixed(2)}
+                {item.payMethod === 'pix' ? 'PIX' : 'Cartão'} · {formatCurrency(Number(item.total))}
               </Text>
             </View>
           )}

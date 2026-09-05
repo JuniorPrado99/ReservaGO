@@ -28,6 +28,39 @@ export async function getUnreadConversationIds(userId: string): Promise<ServiceR
   return { data: ids, error: null };
 }
 
+/**
+ * Acha uma conversa já existente entre esse hóspede e anfitrião (pro mesmo
+ * anúncio, se informado) ou cria uma nova - usado pelo botão "Contato" em
+ * app/details.tsx, que antes não tinha nenhuma função pra isso (só dava pra
+ * listar/enviar mensagem em conversas que já existiam). Devolve o id da
+ * conversa, pra navegar direto pra ela em app/(tabs)/messages.tsx.
+ *
+ * Precisa da policy `conversations_participant_insert` (nova, ver
+ * supabase/migrations/004_conversations_insert_policy.sql) - antes dessa
+ * migração, conversations só tinha policy de leitura, nenhuma de escrita.
+ */
+export async function getOrCreateConversation(
+  guestId: string,
+  hostId: string,
+  propertyId?: string | null
+): Promise<ServiceResult<string>> {
+  let query = supabase.from('conversations').select('id').eq('guest_id', guestId).eq('host_id', hostId);
+  if (propertyId) query = query.eq('property_id', propertyId);
+
+  const { data: existing, error: findError } = await query.limit(1);
+  if (findError) return { data: null, error: findError.message };
+  if (existing && existing.length > 0) return { data: existing[0].id, error: null };
+
+  const { data: created, error: createError } = await supabase
+    .from('conversations')
+    .insert({ guest_id: guestId, host_id: hostId, property_id: propertyId ?? null })
+    .select('id')
+    .single();
+
+  if (createError) return { data: null, error: createError.message };
+  return { data: created.id, error: null };
+}
+
 export async function getMessages(conversationId: string): Promise<ServiceResult<Message[]>> {
   const { data, error } = await supabase
     .from('messages')
