@@ -23,16 +23,29 @@ import {
     ScrollView,
     StyleSheet,
     Text,
+    TextInput,
     TouchableOpacity,
     View,
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { useBookings } from '../context/BookingContext';
 import { useFavorites } from '../context/FavoritesContext';
+import { formatCurrency } from '../lib/format';
 import { checkAvailability, createBooking } from '../services/bookingService';
+import { getOrCreateConversation } from '../services/messageService';
+import { getProfile } from '../services/profileService';
 import { getPropertyById } from '../services/propertyService';
+import { createReport } from '../services/reportService';
 import { getReviewsByProperty } from '../services/reviewService';
-import type { Property as DbProperty, ReviewWithAuthor } from '../services/types';
+import type { Profile, Property as DbProperty, ReviewWithAuthor } from '../services/types';
+
+const REPORT_REASONS = [
+  'Anúncio enganoso ou informação falsa',
+  'Conteúdo impróprio ou ofensivo',
+  'Suspeita de golpe ou fraude',
+  'Cabana não existe ou já foi removida',
+  'Outro motivo',
+];
 
 const ISOLATION_MAP: Record<string, { emoji: string; title: string; sub: string }> = {
   urbano: {
@@ -106,6 +119,16 @@ export default function DetailsScreen() {
   const [reviewsFailed, setReviewsFailed] = useState(false);
   const [confirming, setConfirming] = useState(false);
 
+  // Anfitrião real (antes era 100% hardcoded: "Carlos Mendes" + foto fixa,
+  // pra qualquer cabana). null enquanto carrega ou se o dono foi excluído.
+  const [hostProfile, setHostProfile] = useState<Profile | null>(null);
+  const [contacting, setContacting] = useState(false);
+
+  const [reportModalVisible, setReportModalVisible] = useState(false);
+  const [reportReason, setReportReason] = useState<string | null>(null);
+  const [reportDetails, setReportDetails] = useState('');
+  const [submittingReport, setSubmittingReport] = useState(false);
+
   useEffect(() => {
     if (!id) {
       setLoadingProperty(false);
@@ -142,6 +165,33 @@ export default function DetailsScreen() {
       cancelled = true;
     };
   }, [id]);
+
+  // Carrega o anfitrião de verdade assim que sabemos o dono (property.owner_id).
+  // Antes disso resolver, ou se getProfile falhar (ex.: dono excluiu a
+  // conta), o card mostra "Anfitrião"/"Usuário removido" - nunca mais um
+  // nome inventado.
+  useEffect(() => {
+    if (!property?.owner_id) {
+      setHostProfile(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    getProfile(property.owner_id).then(({ data, error }) => {
+      if (cancelled) return;
+      if (error || !data) {
+        console.log('[details] getProfile (anfitrião) falhou ->', error);
+        setHostProfile(null);
+      } else {
+        setHostProfile(data);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [property?.owner_id]);
 
   // Enquanto a busca real não termina (ou se ela falhar), os params da
   // navegação seguem valendo - é o que já dava o carregamento instantâneo
@@ -281,6 +331,91 @@ export default function DetailsScreen() {
     Linking.openURL(url).catch(() => {
       Linking.openURL(`https://maps.google.com/?q=${query}`);
     });
+  };
+
+  // "Contato" no card do anfitrião - antes não tinha nenhum onPress. Cria
+  // (ou acha) a conversa com getOrCreateConversation e navega direto pra
+  // ela em app/(tabs)/messages.tsx via param.
+  const handleContact = async () => {
+    if (!user) {
+      Alert.alert('Login necessário', 'Você precisa estar logado para falar com o anfitrião.', [
+        { text: 'Depois' },
+        { text: 'Login', onPress: () => router.push('../login') },
+      ]);
+      return;
+    }
+    if (isStaticUser) {
+      Alert.alert(
+        'Login de desenvolvimento',
+        'Esse login fake (__DEV__) não tem perfil real no banco - não dá pra abrir uma conversa. Entre com o Google pra testar de verdade.'
+      );
+      return;
+    }
+    if (!property) {
+      Alert.alert('Indisponível', 'Não foi possível abrir a conversa agora. Tente novamente mais tarde.');
+      return;
+    }
+    if (property.owner_id === user.id) {
+      Alert.alert('Essa é a sua cabana', 'Você é o anfitrião deste anúncio.');
+      return;
+    }
+
+    setContacting(true);
+    const { data: conversationId, error } = await getOrCreateConversation(user.id, property.owner_id, property.id);
+    setContacting(false);
+
+    if (error || !conversationId) {
+      console.log('[details] getOrCreateConversation falhou ->', error);
+      Alert.alert('Erro', 'Não foi possível abrir a conversa agora. Tente novamente.');
+      return;
+    }
+
+    router.push({ pathname: '/(tabs)/messages', params: { conversationId } });
+  };
+
+  // "🚩 Denunciar este anúncio" - antes não tinha nenhum onPress, e não
+  // existia NENHUMA função em services/ pra criar uma denúncia.
+  const openReportModal = () => {
+    if (!user) {
+      Alert.alert('Login necessário', 'Você precisa estar logado para denunciar um anúncio.', [
+        { text: 'Depois' },
+        { text: 'Login', onPress: () => router.push('../login') },
+      ]);
+      return;
+    }
+    if (isStaticUser) {
+      Alert.alert(
+        'Login de desenvolvimento',
+        'Esse login fake (__DEV__) não tem perfil real no banco - não dá pra enviar uma denúncia. Entre com o Google pra testar de verdade.'
+      );
+      return;
+    }
+    setReportReason(null);
+    setReportDetails('');
+    setReportModalVisible(true);
+  };
+
+  const submitReport = async () => {
+    if (!user || !reportReason || !property) return;
+
+    setSubmittingReport(true);
+    const { error } = await createReport({
+      reporter_id: user.id,
+      property_id: property.id,
+      reported_user_id: property.owner_id,
+      reason: reportReason,
+      details: reportDetails.trim() || null,
+    });
+    setSubmittingReport(false);
+
+    if (error) {
+      console.log('[details] createReport falhou ->', error);
+      Alert.alert('Erro', 'Não foi possível enviar a denúncia agora. Tente novamente.');
+      return;
+    }
+
+    setReportModalVisible(false);
+    Alert.alert('Denúncia enviada', 'Obrigado por avisar - nossa equipe vai analisar.');
   };
 
   const renderCalendarDays = () => {
@@ -473,13 +608,24 @@ export default function DetailsScreen() {
           <View style={styles.divider} />
           <Text style={styles.sectionTitle}>Anfitrião</Text>
           <View style={styles.hostCard}>
-            <Image source={{ uri: 'https://i.pravatar.cc/100?img=8' }} style={styles.hostAvatar} />
+            <Image
+              source={{ uri: hostProfile?.avatar_url || 'https://i.pravatar.cc/100?img=8' }}
+              style={styles.hostAvatar}
+            />
             <View style={{ flex: 1 }}>
-              <Text style={styles.hostName}>Carlos Mendes</Text>
-              <Text style={styles.hostSub}>Superhost ⭐ · No ReservaGO desde 2022</Text>
+              <Text style={styles.hostName}>{hostProfile?.name || 'Usuário removido'}</Text>
+              <Text style={styles.hostSub}>
+                {hostProfile?.created_at
+                  ? `No ReservaGO desde ${new Date(hostProfile.created_at).getFullYear()}`
+                  : 'Anfitrião'}
+              </Text>
             </View>
-            <TouchableOpacity style={styles.contactBtn}>
-              <Text style={styles.contactBtnText}>Contato</Text>
+            <TouchableOpacity style={styles.contactBtn} onPress={handleContact} disabled={contacting}>
+              {contacting ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <Text style={styles.contactBtnText}>Contato</Text>
+              )}
             </TouchableOpacity>
           </View>
 
@@ -495,7 +641,7 @@ export default function DetailsScreen() {
             <Text key={i} style={styles.ruleText}>{rule}</Text>
           ))}
 
-          <TouchableOpacity style={styles.reportBtn}>
+          <TouchableOpacity style={styles.reportBtn} onPress={openReportModal}>
             <Text style={styles.reportText}>🚩 Denunciar este anúncio</Text>
           </TouchableOpacity>
         </View>
@@ -503,7 +649,7 @@ export default function DetailsScreen() {
 
       <View style={styles.footer}>
         <View>
-          <Text style={styles.footerPrice}>R$ {priceNum}</Text>
+          <Text style={styles.footerPrice}>{formatCurrency(priceNum)}</Text>
           <Text style={styles.footerNight}>por noite</Text>
         </View>
         <TouchableOpacity style={styles.reserveButton} onPress={openReserveFlow}>
@@ -563,23 +709,23 @@ export default function DetailsScreen() {
                 <View style={styles.priceSummary}>
                   <Text style={styles.priceSummaryTitle}>Resumo</Text>
                   <View style={styles.priceSummaryRow}>
-                    <Text style={styles.priceSummaryLabel}>R$ {priceNum} × {nightCount} noite(s)</Text>
-                    <Text style={styles.priceSummaryValue}>R$ {subtotal.toFixed(2)}</Text>
+                    <Text style={styles.priceSummaryLabel}>{formatCurrency(priceNum)} × {nightCount} noite(s)</Text>
+                    <Text style={styles.priceSummaryValue}>{formatCurrency(subtotal)}</Text>
                   </View>
                   <View style={styles.priceSummaryRow}>
                     <Text style={styles.priceSummaryLabel}>Taxa de serviço (10%)</Text>
-                    <Text style={styles.priceSummaryValue}>R$ {serviceFee.toFixed(2)}</Text>
+                    <Text style={styles.priceSummaryValue}>{formatCurrency(serviceFee)}</Text>
                   </View>
                   {payMethod === 'pix' && (
                     <View style={styles.priceSummaryRow}>
                       <Text style={[styles.priceSummaryLabel, { color: '#2D5A27' }]}>Desconto PIX (5%)</Text>
-                      <Text style={[styles.priceSummaryValue, { color: '#2D5A27' }]}>- R$ {(total * 0.05).toFixed(2)}</Text>
+                      <Text style={[styles.priceSummaryValue, { color: '#2D5A27' }]}>- {formatCurrency(total * 0.05)}</Text>
                     </View>
                   )}
                   <View style={[styles.priceSummaryRow, { marginTop: 8, borderTopWidth: 1, borderColor: '#EEE', paddingTop: 8 }]}>
                     <Text style={{ fontWeight: 'bold', fontSize: 16 }}>Total</Text>
                     <Text style={{ fontWeight: 'bold', fontSize: 16 }}>
-                      R$ {(payMethod === 'pix' ? total * 0.95 : total).toFixed(2)}
+                      {formatCurrency(payMethod === 'pix' ? total * 0.95 : total)}
                     </Text>
                   </View>
                 </View>
@@ -611,6 +757,62 @@ export default function DetailsScreen() {
                 </TouchableOpacity>
               </View>
             )}
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={reportModalVisible} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHandle} />
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Denunciar anúncio</Text>
+              <TouchableOpacity onPress={() => setReportModalVisible(false)}>
+                <X size={24} color="#000" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={{ padding: 20 }}>
+              <Text style={styles.sectionTitle}>Qual o motivo?</Text>
+              {REPORT_REASONS.map((reason) => (
+                <TouchableOpacity
+                  key={reason}
+                  style={[styles.reportReasonOption, reportReason === reason && styles.reportReasonOptionActive]}
+                  onPress={() => setReportReason(reason)}
+                >
+                  <Text
+                    style={[styles.reportReasonText, reportReason === reason && styles.reportReasonTextActive]}
+                  >
+                    {reason}
+                  </Text>
+                  {reportReason === reason && <Check size={18} color="#fff" />}
+                </TouchableOpacity>
+              ))}
+
+              <Text style={[styles.sectionTitle, { marginTop: 20 }]}>Detalhes (opcional)</Text>
+              <TextInput
+                style={styles.reportDetailsInput}
+                placeholder="Conte mais sobre o que aconteceu..."
+                placeholderTextColor="#9CA3AF"
+                value={reportDetails}
+                onChangeText={setReportDetails}
+                multiline
+                numberOfLines={4}
+                textAlignVertical="top"
+              />
+
+              <TouchableOpacity
+                style={[styles.advanceBtn, (!reportReason || submittingReport) && { opacity: 0.6 }]}
+                onPress={submitReport}
+                disabled={!reportReason || submittingReport}
+              >
+                {submittingReport ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.advanceBtnText}>Enviar denúncia</Text>
+                )}
+              </TouchableOpacity>
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -691,4 +893,15 @@ const styles = StyleSheet.create({
   priceSummaryValue: { fontWeight: '600', fontSize: 14 },
   payOption: { flexDirection: 'row', justifyContent: 'space-between', padding: 15, borderWidth: 1, borderColor: '#DDD', borderRadius: 12, marginBottom: 10 },
   payOptionActive: { borderColor: '#2D5A27', backgroundColor: '#F0F7F0' },
+  reportReasonOption: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    padding: 15, borderWidth: 1, borderColor: '#DDD', borderRadius: 12, marginBottom: 10,
+  },
+  reportReasonOptionActive: { borderColor: '#2D5A27', backgroundColor: '#2D5A27' },
+  reportReasonText: { color: '#1F2937', fontSize: 14, flex: 1 },
+  reportReasonTextActive: { color: '#fff', fontWeight: '600' },
+  reportDetailsInput: {
+    borderWidth: 1, borderColor: '#DDD', borderRadius: 12, padding: 14,
+    fontSize: 14, color: '#1F2937', minHeight: 90, marginBottom: 10,
+  },
 });

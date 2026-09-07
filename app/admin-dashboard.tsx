@@ -15,6 +15,7 @@ import {
 } from '../services/adminService';
 import { approveProperty, getProperties, setFeatured } from '../services/propertyService';
 import type { Property as DbProperty } from '../services/types';
+import { formatCurrency } from '../lib/format';
 
 type ApprovalSubTab = 'pendente' | 'ativo' | 'inativo';
 
@@ -329,7 +330,7 @@ export default function AdminDashboard() {
                       <View style={styles.cabinInfo}>
                         <Text style={styles.cabinName}>{cabin.title}</Text>
                         <Text style={styles.cabinHost}>{cabin.location || 'Localização não informada'}</Text>
-                        <Text style={styles.cabinPrice}>R$ {cabin.price}/noite</Text>
+                        <Text style={styles.cabinPrice}>{formatCurrency(cabin.price)}/noite</Text>
                       </View>
                       <View style={styles.actionButtons}>
                         <TouchableOpacity onPress={() => handleApprove(cabin, true)}>
@@ -358,7 +359,7 @@ export default function AdminDashboard() {
                       <View style={styles.cabinInfo}>
                         <Text style={styles.cabinName}>{cabin.title}</Text>
                         <Text style={styles.cabinHost}>{cabin.location || 'Localização não informada'}</Text>
-                        <Text style={styles.cabinPrice}>R$ {cabin.price}/noite</Text>
+                        <Text style={styles.cabinPrice}>{formatCurrency(cabin.price)}/noite</Text>
                       </View>
                       <TouchableOpacity onPress={() => handleApprove(cabin, false)}>
                         <XCircle size={28} color="#EF4444" />
@@ -385,7 +386,7 @@ export default function AdminDashboard() {
                       <View style={styles.cabinInfo}>
                         <Text style={styles.cabinName}>{cabin.title}</Text>
                         <Text style={styles.cabinHost}>{cabin.location || 'Localização não informada'}</Text>
-                        <Text style={styles.cabinPrice}>R$ {cabin.price}/noite</Text>
+                        <Text style={styles.cabinPrice}>{formatCurrency(cabin.price)}/noite</Text>
                       </View>
                       <TouchableOpacity onPress={() => handleApprove(cabin, true)}>
                         <CheckCircle size={28} color="#10B981" />

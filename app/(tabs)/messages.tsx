@@ -1,3 +1,4 @@
+import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator, StyleSheet, Text, View, FlatList, Image,
@@ -120,6 +121,10 @@ function mapMessage(m: DbMessage, userId: string): Message {
 export default function MessagesScreen() {
   const { user } = useAuth();
   const { refresh: refreshNotifications } = useNotifications();
+  // Aberto direto numa conversa específica (ex.: botão "Contato" em
+  // app/details.tsx, que acabou de criar/achar essa conversa e já sabe o
+  // id dela) - ver useEffect de auto-abertura mais abaixo.
+  const { conversationId: openConversationId } = useLocalSearchParams<{ conversationId?: string }>();
 
   // Usuário estático (__DEV__) não existe em profiles/auth - fica só no
   // mock local, como sempre funcionou.
@@ -131,6 +136,8 @@ export default function MessagesScreen() {
   const [activeChat, setActiveChat] = useState<Chat | null>(null);
   const [inputText, setInputText] = useState('');
   const activeChatIdRef = useRef<string | null>(null);
+  const autoOpenedIdRef = useRef<string | null>(null);
+  const autoOpenRetriedRef = useRef<string | null>(null);
 
   useEffect(() => {
     activeChatIdRef.current = activeChat?.id ?? null;
@@ -208,6 +215,28 @@ export default function MessagesScreen() {
       }
     });
   };
+
+  // Chegou aqui com ?conversationId=... (botão "Contato" em details.tsx) -
+  // abre essa conversa direto, sem o usuário precisar procurar na lista.
+  // Se essa tela já estava montada (aba em cache do expo-router) a lista
+  // pode estar desatualizada logo na primeira tentativa - por isso recarrega
+  // uma vez se não achar de primeira, antes de desistir.
+  useEffect(() => {
+    if (!openConversationId || autoOpenedIdRef.current === openConversationId) return;
+
+    const chat = chats.find((c) => c.id === openConversationId);
+    if (chat) {
+      autoOpenedIdRef.current = openConversationId;
+      openChat(chat);
+      return;
+    }
+
+    if (isConnected && autoOpenRetriedRef.current !== openConversationId) {
+      autoOpenRetriedRef.current = openConversationId;
+      loadConversations();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openConversationId, chats, isConnected]);
 
   const sendMessage = () => {
     const text = inputText.trim();
