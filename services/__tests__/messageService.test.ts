@@ -11,6 +11,7 @@ import { supabase } from '../../lib/supabase';
 import {
   getConversations,
   getMessages,
+  getOrCreateConversation,
   getUnreadConversationIds,
   markAsRead,
   sendMessage,
@@ -28,6 +29,7 @@ function makeBuilder(result: { data: any; error: any }): any {
     in: jest.fn(() => builder),
     or: jest.fn(() => builder),
     order: jest.fn(() => builder),
+    limit: jest.fn(() => builder),
     single: jest.fn(() => Promise.resolve(result)),
     then: (resolve: any, reject: any) => Promise.resolve(result).then(resolve, reject),
   };
@@ -145,6 +147,57 @@ describe('messageService.markAsRead', () => {
 
     expect(mockFrom).not.toHaveBeenCalled();
     expect(result).toEqual({ data: [], error: null });
+  });
+});
+
+describe('messageService.getOrCreateConversation', () => {
+  it('acha uma conversa já existente (guest+host+cabana) e não tenta criar outra', async () => {
+    const findBuilder = makeBuilder({ data: [{ id: 'conv-existing' }], error: null });
+    mockFrom.mockReturnValueOnce(findBuilder);
+
+    const result = await getOrCreateConversation('guest-1', 'host-1', 'prop-1');
+
+    expect(mockFrom).toHaveBeenCalledTimes(1);
+    expect(findBuilder.eq).toHaveBeenCalledWith('guest_id', 'guest-1');
+    expect(findBuilder.eq).toHaveBeenCalledWith('host_id', 'host-1');
+    expect(findBuilder.eq).toHaveBeenCalledWith('property_id', 'prop-1');
+    expect(findBuilder.limit).toHaveBeenCalledWith(1);
+    expect(result).toEqual({ data: 'conv-existing', error: null });
+  });
+
+  it('sem conversa existente, cria uma nova e devolve o id dela', async () => {
+    const findBuilder = makeBuilder({ data: [], error: null });
+    const insertBuilder = makeBuilder({ data: { id: 'conv-new' }, error: null });
+    mockFrom.mockReturnValueOnce(findBuilder).mockReturnValueOnce(insertBuilder);
+
+    const result = await getOrCreateConversation('guest-1', 'host-1');
+
+    expect(insertBuilder.insert).toHaveBeenCalledWith({
+      guest_id: 'guest-1',
+      host_id: 'host-1',
+      property_id: null,
+    });
+    expect(result).toEqual({ data: 'conv-new', error: null });
+  });
+
+  it('propaga erro da busca sem tentar criar', async () => {
+    const findBuilder = makeBuilder({ data: null, error: { message: 'falha de conexão' } });
+    mockFrom.mockReturnValueOnce(findBuilder);
+
+    const result = await getOrCreateConversation('guest-1', 'host-1');
+
+    expect(mockFrom).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({ data: null, error: 'falha de conexão' });
+  });
+
+  it('propaga erro da criação (ex.: RLS ainda sem a policy de INSERT)', async () => {
+    mockFrom
+      .mockReturnValueOnce(makeBuilder({ data: [], error: null }))
+      .mockReturnValueOnce(makeBuilder({ data: null, error: { message: 'new row violates row-level security policy' } }));
+
+    const result = await getOrCreateConversation('guest-1', 'host-1');
+
+    expect(result).toEqual({ data: null, error: 'new row violates row-level security policy' });
   });
 });
 
