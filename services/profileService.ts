@@ -11,6 +11,19 @@ export async function getProfile(id: string): Promise<ServiceResult<Profile>> {
   return toResult(data, error);
 }
 
+/**
+ * Busca vários perfis de uma vez por id (mesmo padrão de getReportsWithContext
+ * em adminService.ts - `.in('id', ids)` + join no client, em vez de N queries
+ * separadas). Usado pra montar a lista de "nova conversa" em
+ * app/(tabs)/messages.tsx (nome/avatar de cada anfitrião distinto no
+ * histórico de reservas do hóspede).
+ */
+export async function getProfilesByIds(ids: string[]): Promise<ServiceResult<Profile[]>> {
+  if (ids.length === 0) return { data: [], error: null };
+  const { data, error } = await supabase.from('profiles').select('*').in('id', ids);
+  return toResult(data, error);
+}
+
 export async function updateProfile(
   id: string,
   dados: Partial<Pick<Profile, 'name' | 'avatar_url' | 'phone' | 'bio' | 'interests'>>

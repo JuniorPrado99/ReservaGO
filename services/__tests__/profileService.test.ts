@@ -26,7 +26,7 @@ jest.mock('expo-file-system', () => ({
 }));
 
 import { supabase } from '../../lib/supabase';
-import { updateRole, uploadAvatar } from '../profileService';
+import { getProfilesByIds, updateRole, uploadAvatar } from '../profileService';
 
 const mockRpc = supabase.rpc as jest.Mock;
 const mockFrom = supabase.from as jest.Mock;
@@ -102,5 +102,33 @@ describe('profileService.uploadAvatar', () => {
     const result = await uploadAvatar('file:///foto.jpg', 'user-1');
 
     expect(result).toEqual({ data: null, error: 'bucket cheio' });
+  });
+});
+
+// getProfilesByIds - usado por app/(tabs)/messages.tsx (branch feature/mensagens)
+// pra buscar nome/avatar de vários anfitriões de uma vez (histórico de
+// reservas do hóspede), mesmo padrão .in('id', ids) de adminService.getReportsWithContext.
+describe('profileService.getProfilesByIds', () => {
+  it('busca vários perfis de uma vez via .in("id", ids)', async () => {
+    const mockIn = jest.fn().mockResolvedValue({
+      data: [{ id: 'host-1', name: 'Carlos' }],
+      error: null,
+    });
+    const builder = { select: jest.fn().mockReturnThis(), in: mockIn };
+    (mockFrom as jest.Mock).mockReturnValueOnce(builder as any);
+
+    const result = await getProfilesByIds(['host-1']);
+
+    expect(mockFrom).toHaveBeenCalledWith('profiles');
+    expect(builder.select).toHaveBeenCalledWith('*');
+    expect(mockIn).toHaveBeenCalledWith('id', ['host-1']);
+    expect(result).toEqual({ data: [{ id: 'host-1', name: 'Carlos' }], error: null });
+  });
+
+  it('lista vazia não bate no banco', async () => {
+    const result = await getProfilesByIds([]);
+
+    expect(mockFrom).not.toHaveBeenCalled();
+    expect(result).toEqual({ data: [], error: null });
   });
 });

@@ -30,9 +30,12 @@ export async function createBooking(dados: NewBooking): Promise<ServiceResult<Bo
 }
 
 export async function getBookingsByGuest(guestId: string): Promise<ServiceResult<BookingWithProperty[]>> {
+  // owner_id no embed (branch feature/mensagens) - usado pra montar a lista
+  // de "iniciar conversa com anfitrião" em app/(tabs)/messages.tsx a partir
+  // do histórico real de reservas, sem query extra por reserva.
   const { data, error } = await supabase
     .from('bookings')
-    .select('*, properties(title, location, images)')
+    .select('*, properties(title, location, images, owner_id)')
     .eq('guest_id', guestId)
     .order('check_in', { ascending: false });
   return toResult(data as unknown as BookingWithProperty[] | null, error);

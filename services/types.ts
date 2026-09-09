@@ -96,9 +96,15 @@ export type NewBooking = Pick<
   'property_id' | 'guest_id' | 'check_in' | 'check_out' | 'pay_method' | 'price_per_night' | 'total' | 'pix_discount'
 >;
 
-/** Booking + dados básicos da propriedade, via embed properties(...) no select do bookingService. */
+/**
+ * Booking + dados básicos da propriedade, via embed properties(...) no select
+ * do bookingService. `owner_id` foi adicionado ao embed (branch
+ * feature/mensagens) pra dar pra saber com qual anfitrião iniciar conversa a
+ * partir do histórico de reservas do hóspede, sem precisar de uma query
+ * separada por reserva.
+ */
 export interface BookingWithProperty extends Booking {
-  properties: { title: string; location: string; images: string[] } | null;
+  properties: { title: string; location: string; images: string[]; owner_id: string } | null;
 }
 
 // ── favorites ────────────────────────────────────────────────────────

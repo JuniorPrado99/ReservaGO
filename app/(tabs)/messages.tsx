@@ -5,18 +5,22 @@ import {
   TouchableOpacity, Modal, TextInput, KeyboardAvoidingView,
   Platform, ScrollView,
 } from 'react-native';
-import { Mail, ChevronRight, Send, X, ShieldCheck } from 'lucide-react-native';
+import { Mail, ChevronRight, Send, X, ShieldCheck, Plus, MessageCircle } from 'lucide-react-native';
 import { useAuth } from '../../context/AuthContext';
 import { useNotifications } from '../../context/NotificationContext';
+import { getBookingsByGuest } from '../../services/bookingService';
 import {
   getConversations,
   getMessages,
+  getOrCreateConversation,
   getUnreadConversationIds,
   markAsRead as markMessagesRead,
   sendMessage as sendMessageRemote,
   subscribeToMessages,
 } from '../../services/messageService';
 import { markMessageNotificationsAsRead } from '../../services/notificationService';
+import { getProfilesByIds } from '../../services/profileService';
+import { getOrCreateSupportConversation, getSupportAdminId } from '../../services/supportService';
 import type { ConversationWithParticipants, Message as DbMessage } from '../../services/types';
 
 type Message = {
@@ -38,20 +42,41 @@ type Chat = {
   isReal?: boolean;
 };
 
+/**
+ * Anfitrião com quem o hóspede já teve reserva - opção pra "iniciar nova
+ * conversa" (botão "+" da aba Mensagens). Montado a partir de
+ * getBookingsByGuest (bookings.properties.owner_id), sem tabela nova: um
+ * anfitrião só aparece aqui se o hóspede já reservou uma cabana dele.
+ */
+type HostOption = {
+  hostId: string;
+  hostName: string;
+  avatar: string | null;
+  propertyId: string;
+  propertyTitle: string;
+};
+
+// Suporte é sempre local/simulado (resposta automática, sem backend/IA por
+// trás - ver SUPPORT_REPLY) - fixado no topo da lista pra QUALQUER usuário,
+// conectado ou não (ver loadConversations abaixo). Extraído como constante
+// pra não duplicar entre o fallback (INITIAL_CHATS) e o merge com conversas
+// reais.
+const SUPPORT_CHAT: Chat = {
+  id: 'support',
+  hostName: 'Suporte ReservaGO',
+  lastMessage: 'Olá! Como podemos te ajudar hoje?',
+  time: 'Agora',
+  avatar: null,
+  unread: true,
+  isSupport: true,
+  messages: [
+    { id: '1', from: 'them', text: 'Olá! Bem-vindo ao suporte ReservaGO. Como podemos te ajudar hoje?' },
+  ],
+};
+
 // Usado só como fallback: usuário estático de dev, ou quando getConversations falha.
 const INITIAL_CHATS: Chat[] = [
-  {
-    id: 'support',
-    hostName: 'Suporte ReservaGO',
-    lastMessage: 'Olá! Como podemos te ajudar hoje?',
-    time: 'Agora',
-    avatar: null,
-    unread: true,
-    isSupport: true,
-    messages: [
-      { id: '1', from: 'them', text: 'Olá! Bem-vindo ao suporte ReservaGO. Como podemos te ajudar hoje?' },
-    ],
-  },
+  SUPPORT_CHAT,
   {
     id: '1',
     hostName: 'Carlos (Cabana do Lago)',
@@ -98,17 +123,31 @@ function formatTime(iso: string): string {
   return `${days}d`;
 }
 
-function mapConversation(conv: ConversationWithParticipants, userId: string, unreadIds: Set<string>): Chat {
+/**
+ * `supportAdminId` (services/supportService.ts) identifica, do lado de quem
+ * é hóspede numa conversa, se o "anfitrião" dessa conversa é na verdade a
+ * conta admin de suporte - nesse caso mostra "Suporte ReservaGO" em vez do
+ * nome real do admin. Do lado do PRÓPRIO admin (isGuest sempre false pra
+ * conversas de suporte, já que ele é o host_id), o hóspede real aparece
+ * normalmente - o admin vê cada conversa como qualquer anfitrião veria.
+ */
+function mapConversation(
+  conv: ConversationWithParticipants,
+  userId: string,
+  unreadIds: Set<string>,
+  supportAdminId: string | null
+): Chat {
   const isGuest = conv.guest_id === userId;
   const other = isGuest ? conv.host : conv.guest;
+  const isSupport = isGuest && !!supportAdminId && conv.host_id === supportAdminId;
   return {
     id: conv.id,
-    hostName: other?.name || 'Usuário removido',
+    hostName: isSupport ? 'Suporte ReservaGO' : other?.name || 'Usuário removido',
     lastMessage: conv.last_message ?? 'Conversa iniciada',
     time: conv.last_message_at ? formatTime(conv.last_message_at) : '',
-    avatar: other?.avatar_url ?? null,
+    avatar: isSupport ? null : other?.avatar_url ?? null,
     unread: unreadIds.has(conv.id),
-    isSupport: false,
+    isSupport,
     messages: [],
     isReal: true,
   };
@@ -130,6 +169,9 @@ export default function MessagesScreen() {
   // mock local, como sempre funcionou.
   const isStaticUser = !!user?.id && user.id.startsWith('static-');
   const isConnected = !!user?.id && !isStaticUser;
+  // O admin de suporte não "fala com o suporte" - ele É o suporte, então não
+  // recebe a entrada fixada no topo (ver loadConversations/openChat).
+  const isSupportAgent = user?.role === 'admin';
 
   const [chats, setChats] = useState<Chat[]>(INITIAL_CHATS);
   const [loading, setLoading] = useState(isConnected);
@@ -138,6 +180,13 @@ export default function MessagesScreen() {
   const activeChatIdRef = useRef<string | null>(null);
   const autoOpenedIdRef = useRef<string | null>(null);
   const autoOpenRetriedRef = useRef<string | null>(null);
+
+  // "+" nova conversa - lista de anfitriões do histórico de reservas do
+  // hóspede (ver HostOption acima).
+  const [newChatVisible, setNewChatVisible] = useState(false);
+  const [hostOptions, setHostOptions] = useState<HostOption[]>([]);
+  const [loadingHosts, setLoadingHosts] = useState(false);
+  const [startingChatId, setStartingChatId] = useState<string | null>(null);
 
   useEffect(() => {
     activeChatIdRef.current = activeChat?.id ?? null;
@@ -149,15 +198,41 @@ export default function MessagesScreen() {
       return;
     }
     setLoading(true);
-    Promise.all([getConversations(user.id), getUnreadConversationIds(user.id)]).then(
-      ([convResult, unreadResult]) => {
+    Promise.all([getConversations(user.id), getUnreadConversationIds(user.id), getSupportAdminId()]).then(
+      ([convResult, unreadResult, adminResult]) => {
         if (convResult.error || !convResult.data) {
           console.log('[messages] getConversations falhou, usando mock local ->', convResult.error);
           setLoading(false);
           return;
         }
         const unreadIds = new Set(unreadResult.data ?? []);
-        setChats(convResult.data.map((c) => mapConversation(c, user.id, unreadIds)));
+        const supportAdminId = adminResult.data;
+        const realChats = convResult.data.map((c) => mapConversation(c, user.id, unreadIds, supportAdminId));
+
+        if (isSupportAgent) {
+          // O admin não vê "Suporte" fixado apontando pra ele mesmo - só a
+          // lista normal de conversas (cada hóspede real que já falou com o suporte).
+          setChats(realChats);
+          setLoading(false);
+          return;
+        }
+
+        // Suporte sempre no topo, mesmo pra quem ainda não tem nenhuma
+        // conversa real - antes, assim que getConversations trazia a lista
+        // real (mesmo vazia), ela substituía tudo e o Suporte sumia pra
+        // qualquer usuário conectado.
+        //
+        // A conversa de suporte já pode existir de verdade em `realChats`
+        // (isSupport:true, primeiro contato feito em outra sessão) - nesse
+        // caso ela toma o lugar do placeholder local. Sem conversa real
+        // ainda, reaproveita o placeholder que já estava em `chats` (pra não
+        // perder mensagens locais desta sessão) ou cai no SUPPORT_CHAT.
+        const realSupport = realChats.find((c) => c.isSupport);
+        const otherChats = realChats.filter((c) => !c.isSupport);
+        setChats((prevChats) => {
+          const pinnedSupport = realSupport ?? prevChats.find((c) => c.id === 'support') ?? SUPPORT_CHAT;
+          return [pinnedSupport, ...otherChats];
+        });
         setLoading(false);
       }
     );
@@ -192,6 +267,36 @@ export default function MessagesScreen() {
   const openChat = (chat: Chat) => {
     setChats((prev) => prev.map((c) => (c.id === chat.id ? { ...c, unread: false } : c)));
 
+    // Primeiro toque no Suporte (ainda é só o placeholder local, "id"
+    // literal 'support') - acha/cria a conversa real com o admin configurado
+    // (services/supportService.ts) e a partir daí segue pelo fluxo real
+    // normal, como qualquer outra conversa. Sem admin configurado ainda
+    // (ou erro de rede), cai pro fallback local mesmo (mock com resposta
+    // automática) em vez de travar a tela.
+    if (chat.id === 'support' && !chat.isReal && isConnected && user?.id) {
+      setActiveChat({ ...chat, unread: false });
+      getOrCreateSupportConversation(user.id).then(({ data: conversationId, error }) => {
+        if (error || !conversationId) {
+          console.log('[messages] getOrCreateSupportConversation falhou, mantendo suporte local ->', error);
+          return;
+        }
+        const realSupportChat: Chat = {
+          id: conversationId,
+          hostName: 'Suporte ReservaGO',
+          lastMessage: '',
+          time: '',
+          avatar: null,
+          unread: false,
+          isSupport: true,
+          messages: [],
+          isReal: true,
+        };
+        setChats((prev) => prev.map((c) => (c.id === 'support' ? realSupportChat : c)));
+        openChat(realSupportChat);
+      });
+      return;
+    }
+
     if (!chat.isReal || !user?.id) {
       setActiveChat({ ...chat, unread: false });
       return;
@@ -213,6 +318,93 @@ export default function MessagesScreen() {
         markMessageNotificationsAsRead(unreadIncoming);
         refreshNotifications();
       }
+    });
+  };
+
+  // Monta as opções de "nova conversa" a partir do histórico real de
+  // reservas do hóspede (bookings.properties.owner_id) - só abre a lista
+  // quando o modal é aberto, não precisa carregar isso toda vez que a aba
+  // monta.
+  const loadHostOptions = () => {
+    if (!isConnected || !user?.id) return;
+    setLoadingHosts(true);
+
+    getBookingsByGuest(user.id).then(({ data: bookings, error }) => {
+      if (error || !bookings) {
+        console.log('[messages] getBookingsByGuest falhou ->', error);
+        setLoadingHosts(false);
+        return;
+      }
+
+      // 1 opção por anfitrião distinto (mais recente primeiro, já que
+      // getBookingsByGuest ordena por check_in desc) - ignora reservas sem
+      // properties embutido (cabana excluída) e o caso teórico de o próprio
+      // usuário aparecer como dono.
+      const byHost = new Map<string, { propertyId: string; propertyTitle: string }>();
+      for (const b of bookings) {
+        const p = b.properties;
+        if (!p || !p.owner_id || p.owner_id === user.id) continue;
+        if (!byHost.has(p.owner_id)) {
+          byHost.set(p.owner_id, { propertyId: b.property_id, propertyTitle: p.title });
+        }
+      }
+
+      if (byHost.size === 0) {
+        setHostOptions([]);
+        setLoadingHosts(false);
+        return;
+      }
+
+      getProfilesByIds(Array.from(byHost.keys())).then(({ data: profiles, error: profilesError }) => {
+        if (profilesError || !profiles) {
+          console.log('[messages] getProfilesByIds falhou ->', profilesError);
+          setLoadingHosts(false);
+          return;
+        }
+        const options: HostOption[] = profiles.map((p) => ({
+          hostId: p.id,
+          hostName: p.name || 'Anfitrião',
+          avatar: p.avatar_url,
+          propertyId: byHost.get(p.id)!.propertyId,
+          propertyTitle: byHost.get(p.id)!.propertyTitle,
+        }));
+        setHostOptions(options);
+        setLoadingHosts(false);
+      });
+    });
+  };
+
+  const openNewChatModal = () => {
+    setNewChatVisible(true);
+    loadHostOptions();
+  };
+
+  // Acha/cria a conversa com esse anfitrião (getOrCreateConversation já
+  // existe - reaproveitado aqui e no botão "Contato" de app/details.tsx) e
+  // abre direto, sem precisar navegar pra fora desta tela.
+  const startConversationWith = (host: HostOption) => {
+    if (!user?.id || startingChatId) return;
+    setStartingChatId(host.hostId);
+
+    getOrCreateConversation(user.id, host.hostId, host.propertyId).then(({ data: conversationId, error }) => {
+      setStartingChatId(null);
+      if (error || !conversationId) {
+        console.log('[messages] getOrCreateConversation falhou ->', error);
+        return;
+      }
+      setNewChatVisible(false);
+      openChat({
+        id: conversationId,
+        hostName: host.hostName,
+        lastMessage: '',
+        time: '',
+        avatar: host.avatar,
+        unread: false,
+        isSupport: false,
+        messages: [],
+        isReal: true,
+      });
+      loadConversations();
     });
   };
 
@@ -284,6 +476,11 @@ export default function MessagesScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Mensagens</Text>
+        {isConnected && (
+          <TouchableOpacity style={styles.addButton} onPress={openNewChatModal}>
+            <Plus size={22} color="#fff" />
+          </TouchableOpacity>
+        )}
       </View>
 
       {loading ? (
@@ -390,6 +587,65 @@ export default function MessagesScreen() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      <Modal visible={newChatVisible} animationType="slide" onRequestClose={() => setNewChatVisible(false)}>
+        <View style={{ flex: 1, backgroundColor: '#fff' }}>
+          <View style={styles.chatModalHeader}>
+            <TouchableOpacity onPress={() => setNewChatVisible(false)}>
+              <X size={24} color="#1F2937" />
+            </TouchableOpacity>
+            <Text style={[styles.chatModalTitle, { marginLeft: 12 }]}>Nova conversa</Text>
+          </View>
+
+          {loadingHosts ? (
+            <View style={styles.emptyContainer}>
+              <ActivityIndicator size="large" color="#2D5A27" />
+            </View>
+          ) : hostOptions.length > 0 ? (
+            <FlatList
+              data={hostOptions}
+              keyExtractor={(item) => item.hostId}
+              contentContainerStyle={{ paddingVertical: 8 }}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={styles.chatCard}
+                  disabled={!!startingChatId}
+                  onPress={() => startConversationWith(item)}
+                >
+                  {item.avatar ? (
+                    <Image source={{ uri: item.avatar }} style={styles.avatar} />
+                  ) : (
+                    <View style={styles.supportAvatar}>
+                      <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#2D5A27' }}>
+                        {item.hostName.charAt(0).toUpperCase()}
+                      </Text>
+                    </View>
+                  )}
+                  <View style={styles.chatContent}>
+                    <Text style={styles.hostName}>{item.hostName}</Text>
+                    <Text style={styles.message} numberOfLines={1}>
+                      Sobre: {item.propertyTitle}
+                    </Text>
+                  </View>
+                  {startingChatId === item.hostId ? (
+                    <ActivityIndicator size="small" color="#2D5A27" />
+                  ) : (
+                    <ChevronRight size={18} color="#E5E7EB" />
+                  )}
+                </TouchableOpacity>
+              )}
+            />
+          ) : (
+            <View style={styles.emptyContainer}>
+              <MessageCircle size={48} color="#E5E7EB" />
+              <Text style={styles.emptyTitle}>Nenhum anfitrião ainda</Text>
+              <Text style={styles.emptySub}>
+                Você poderá iniciar uma conversa assim que fizer sua primeira reserva.
+              </Text>
+            </View>
+          )}
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -402,8 +658,19 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
     borderBottomWidth: 1,
     borderBottomColor: '#F3F4F6',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   title: { fontSize: 26, fontWeight: 'bold', color: '#1F2937' },
+  addButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#2D5A27',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   chatCard: {
     flexDirection: 'row',
     padding: 16,

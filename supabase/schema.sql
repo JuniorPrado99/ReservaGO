@@ -40,19 +40,47 @@ CREATE TABLE profiles (
 );
 
 -- Trigger para criar perfil automaticamente ao criar usuário
+--
+-- ATENÇÃO (corrigido em 08/09/2026, ver supabase/migrations/005): a versão
+-- rodando no banco real tinha divergido deste arquivo - ganhou `role`,
+-- `created_at`, `updated_at`, `ON CONFLICT (id) DO NOTHING` e um bloco
+-- EXCEPTION que loga e engole qualquer erro (RAISE LOG + RETURN NEW), sem
+-- essas mudanças terem sido documentadas aqui. Esse bloco EXCEPTION mascarou
+-- um bug real: a função não fixava `search_path`, então `profiles` (sem
+-- prefixo de schema) só resolvia certo quando alguém rodava o INSERT
+-- manualmente no SQL Editor (sessão com search_path = public por padrão) -
+-- disparada sozinha pela trigger durante um cadastro de verdade, rodava num
+-- contexto sem `public` no search_path, o INSERT falhava com "relation
+-- profiles does not exist", o EXCEPTION engolia o erro, e o login
+-- terminava "funcionando" (auth.users criado) sem nunca criar o profile.
+-- Encontrado ao vivo: 2 contas reais (Ian Couto, Thiago Patrick) logaram
+-- com sucesso e ficaram sem profile, com o app caindo num fallback local
+-- (context/AuthContext.tsx) sem nada persistido no banco.
 CREATE OR REPLACE FUNCTION handle_new_user()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
 BEGIN
-  INSERT INTO profiles (id, name, email, avatar_url)
+  INSERT INTO public.profiles (id, name, email, avatar_url, role, created_at, updated_at)
   VALUES (
     NEW.id,
     COALESCE(NEW.raw_user_meta_data->>'full_name', ''),
     COALESCE(NEW.email, ''),
-    COALESCE(NEW.raw_user_meta_data->>'avatar_url', NULL)
-  );
+    COALESCE(NEW.raw_user_meta_data->>'avatar_url', NULL),
+    'hospede',
+    NOW(),
+    NOW()
+  )
+  ON CONFLICT (id) DO NOTHING;
   RETURN NEW;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE LOG 'Error in handle_new_user: %', SQLERRM;
+    RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$;
 
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
