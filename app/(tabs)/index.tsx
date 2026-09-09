@@ -1,6 +1,7 @@
+import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import { ChevronDown, ChevronUp } from 'lucide-react-native';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   BackHandler,
@@ -34,35 +35,53 @@ export default function HomeScreen() {
   const isStaticUser = !!user?.id && user.id.startsWith('static-');
   const [remoteProperties, setRemoteProperties] = useState<Listing[] | null>(null);
   const [loadingProperties, setLoadingProperties] = useState(!isStaticUser);
+  // Só mostra o spinner de tela cheia antes da primeira carga - refs (não
+  // state) porque é lido de dentro do callback do useFocusEffect abaixo, que
+  // só é recriado quando isStaticUser muda; um state aqui ficaria "stale"
+  // (sempre o valor de quando a função foi criada) nos refocos seguintes.
+  const hasLoadedOnceRef = useRef(false);
 
-  useEffect(() => {
-    if (isStaticUser) {
-      setRemoteProperties(null);
-      setLoadingProperties(false);
-      return;
-    }
+  // useFocusEffect (não useEffect simples) - a aba Explorar fica montada o
+  // tempo todo (React Navigation não desmonta abas ao trocar), então um
+  // useEffect com `[]`/`[isStaticUser]` só busca os dados UMA vez, na
+  // primeira montagem. Bug real encontrado ao vivo: cadastrar uma cabana
+  // nova (ou um admin aprovar uma pendente) em outra tela não atualizava o
+  // Explorar até reiniciar o app inteiro - "Nenhuma cabana disponível"
+  // mesmo com cabanas reais e aprovadas no banco. Com useFocusEffect, toda
+  // vez que o usuário volta pra essa aba (voltando de "Anunciar nova
+  // cabana", do Painel de Controle, etc.) os dados são buscados de novo.
+  useFocusEffect(
+    useCallback(() => {
+      if (isStaticUser) {
+        setRemoteProperties(null);
+        setLoadingProperties(false);
+        return;
+      }
 
-    let cancelled = false;
-    setLoadingProperties(true);
+      let cancelled = false;
+      if (!hasLoadedOnceRef.current) setLoadingProperties(true);
 
-    getProperties()
-      .then(({ data, error }) => {
-        if (cancelled) return;
-        if (error || !data) {
-          console.log('[index] getProperties falhou, usando fallback local ->', error);
-          setRemoteProperties(null);
-        } else {
-          setRemoteProperties(data.map(mapPropertyToListing));
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingProperties(false);
-      });
+      getProperties()
+        .then(({ data, error }) => {
+          if (cancelled) return;
+          if (error || !data) {
+            console.log('[index] getProperties falhou, usando fallback local ->', error);
+            if (!hasLoadedOnceRef.current) setRemoteProperties(null);
+          } else {
+            setRemoteProperties(data.map(mapPropertyToListing));
+          }
+        })
+        .finally(() => {
+          if (cancelled) return;
+          setLoadingProperties(false);
+          hasLoadedOnceRef.current = true;
+        });
 
-    return () => {
-      cancelled = true;
-    };
-  }, [isStaticUser]);
+      return () => {
+        cancelled = true;
+      };
+    }, [isStaticUser])
+  );
 
   const allProperties = useMemo(
     () => remoteProperties ?? localProperties,

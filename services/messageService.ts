@@ -89,8 +89,25 @@ export function subscribeToMessages(
   userId: string,
   callback: (message: Message) => void
 ): () => void {
+  const topic = `messages:${userId}`;
+
+  // Bug real encontrado ao vivo (branch feature/mensagens, 07/09/2026, sem
+  // relação com o resto das mudanças desta branch): trocar de conta (logout
+  // + login Google de novo) faz o React reconectar os effects da tela
+  // inteira depois do app voltar do navegador externo do OAuth - esse effect
+  // roda de novo sem o cleanup anterior (o `return () => removeChannel(...)`
+  // lá embaixo) ter sido chamado primeiro. supabase-js reaproveita o channel
+  // já existente pro mesmo tópico em vez de criar um novo, e chamar `.on()`
+  // de novo nele depois que ele já foi assinado quebra com "cannot add
+  // `postgres_changes` callbacks ... after `subscribe()`." Remover qualquer
+  // channel remanescente com esse tópico antes de assinar de novo deixa a
+  // function idempotente, não importa quantas vezes o effect rodar sem
+  // limpeza.
+  const stale = supabase.getChannels().find((c) => c.topic === `realtime:${topic}`);
+  if (stale) supabase.removeChannel(stale);
+
   const channel = supabase
-    .channel(`messages:${userId}`)
+    .channel(topic)
     .on(
       'postgres_changes',
       { event: 'INSERT', schema: 'public', table: 'messages' },

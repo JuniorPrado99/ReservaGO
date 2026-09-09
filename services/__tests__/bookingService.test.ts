@@ -98,6 +98,15 @@ describe('bookingService.getBookingsByGuest', () => {
 
     expect(builder.eq).toHaveBeenCalledWith('guest_id', 'guest-1');
   });
+
+  it('embute owner_id junto com title/location/images (precisa saber o anfitrião pra "nova conversa")', async () => {
+    const builder = makeBuilder({ data: [], error: null });
+    mockFrom.mockReturnValue(builder);
+
+    await getBookingsByGuest('guest-1');
+
+    expect(builder.select).toHaveBeenCalledWith('*, properties(title, location, images, owner_id)');
+  });
 });
 
 describe('bookingService.getBookingsByHost', () => {

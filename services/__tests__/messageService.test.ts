@@ -4,6 +4,7 @@ jest.mock('@supabase/supabase-js', () => ({
     from: jest.fn(),
     channel: jest.fn(),
     removeChannel: jest.fn(),
+    getChannels: jest.fn(() => []),
   })),
 }));
 
@@ -108,6 +109,7 @@ describe('messageService.subscribeToMessages', () => {
     mockOn.mockReturnValue(fakeChannel);
     mockSubscribe.mockReturnValue(fakeChannel);
     (supabase.channel as jest.Mock).mockReturnValue(fakeChannel);
+    (supabase.getChannels as jest.Mock).mockReturnValue([]);
 
     const callback = jest.fn();
     const unsubscribe = subscribeToMessages('user-1', callback);
@@ -128,6 +130,37 @@ describe('messageService.subscribeToMessages', () => {
     expect(typeof unsubscribe).toBe('function');
     unsubscribe();
     expect(supabase.removeChannel).toHaveBeenCalledWith(fakeChannel);
+  });
+
+  it('remove um channel remanescente do mesmo tópico antes de assinar de novo (bug real: effect roda sem o cleanup anterior ter sido chamado, ex. depois do app voltar do navegador externo do login Google - supabase-js reaproveita o channel já existente e .on() nele depois de já assinado quebra)', () => {
+    const staleChannel: any = { topic: 'realtime:messages:user-1' };
+    (supabase.getChannels as jest.Mock).mockReturnValue([staleChannel]);
+
+    const mockOn = jest.fn();
+    const fakeChannel: any = { on: mockOn };
+    mockOn.mockReturnValue(fakeChannel);
+    fakeChannel.subscribe = jest.fn(() => fakeChannel);
+    (supabase.channel as jest.Mock).mockReturnValue(fakeChannel);
+
+    subscribeToMessages('user-1', jest.fn());
+
+    expect(supabase.getChannels).toHaveBeenCalled();
+    expect(supabase.removeChannel).toHaveBeenCalledWith(staleChannel);
+  });
+
+  it('não mexe em channels de outros tópicos', () => {
+    const otherChannel: any = { topic: 'realtime:messages:outro-user' };
+    (supabase.getChannels as jest.Mock).mockReturnValue([otherChannel]);
+
+    const mockOn = jest.fn();
+    const fakeChannel: any = { on: mockOn };
+    mockOn.mockReturnValue(fakeChannel);
+    fakeChannel.subscribe = jest.fn(() => fakeChannel);
+    (supabase.channel as jest.Mock).mockReturnValue(fakeChannel);
+
+    subscribeToMessages('user-1', jest.fn());
+
+    expect(supabase.removeChannel).not.toHaveBeenCalledWith(otherChannel);
   });
 });
 
