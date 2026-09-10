@@ -65,7 +65,7 @@ npx expo start --clear
 
 Após iniciar, escaneie o QR Code com o Expo Go (Android) ou com a câmera (iOS).
 
-> ⚠️ O login com Google **não funciona dentro do Expo Go** (limitação do redirecionamento OAuth do próprio Expo Go — ver `CLAUDE.md`, seção 9). Pra testar esse fluxo é necessário um development build (`expo-dev-client` + EAS Build, já configurado em `eas.json`). `ngrok` não faz mais parte do fluxo atual.
+> ⚠️ O login com Google **não funciona dentro do Expo Go** (limitação do redirecionamento OAuth do próprio Expo Go — ver `PROJETO.md`, seção 9). Pra testar esse fluxo é necessário um development build (`expo-dev-client` + EAS Build, já configurado em `eas.json`). `ngrok` não faz mais parte do fluxo atual.
 
 ---
 

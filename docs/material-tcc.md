@@ -1,12 +1,12 @@
 # ReservaGO — Material para o Documento do TCC
 
-> Gerado em 2026-08-22 a partir da leitura direta do código-fonte na branch
+> Escrito em 2026-08-22 a partir da leitura direta do código-fonte na branch
 > `feature/oauth-google` (não do README, que ainda descreve um estado antigo
-> do projeto — ver `CLAUDE.md`, seção "Divergências"). Todo o conteúdo abaixo
+> do projeto — ver `PROJETO.md`, seção "Divergências"). Todo o conteúdo abaixo
 > descreve o que **existe de fato no código**, não o que foi planejado.
 >
 > As seções 5 e 6 usam a numeração oficial de RF/RNF do documento do TCC
-> (ver `CLAUDE.md`, seção "Requisitos do TCC — numeração oficial").
+> (ver `PROJETO.md`, seção "Requisitos do TCC — numeração oficial").
 >
 > **Atualizado em 2026-09-04** (branch `feature/perfil-admin`): RF-008
 > (editar perfil) fechado — era o único RF ainda não conectado ao Supabase,
@@ -69,7 +69,7 @@ ReservaGO/
 ├── assets/                       # Fontes e imagens
 ├── app.json, eas.json            # Config do Expo e do EAS Build (dev client)
 ├── .env.example                  # Template das variáveis de ambiente necessárias
-└── CLAUDE.md                     # Documentação viva do projeto para sessões de IA
+└── PROJETO.md                    # Documentação viva da estrutura do projeto
 ```
 
 **Novidade central desta fase**: a pasta `services/`, que centraliza 100% do acesso ao Supabase.
@@ -159,7 +159,7 @@ via CI) — o pipeline cobre só qualidade de código (tipos + testes).
 | RF-004 | Realizar reservas diretamente pelo aplicativo | ✅ Conectado ao Supabase | `app/details.tsx` → `bookingService.checkAvailability()` + `createBooking()`, desconto PIX 5% mantido |
 | RF-005 | Salvar hospedagens como favoritas | ✅ Conectado ao Supabase | `FavoritesContext` → `services/favoriteService.ts`. AsyncStorage virou cache offline (não mais fonte única) |
 | RF-006 | Enviar e receber mensagens entre hóspedes e anfitriões | ✅ Conectado ao Supabase | `app/(tabs)/messages.tsx` → `messageService` (conversas, histórico, envio, Realtime com dedupe, marca como lida ao abrir) |
-| RF-007 | Fazer login com conta Google | ✅ Conectado ao Supabase, validado de ponta a ponta | `app/login.tsx`, `app/oauth-callback.tsx`, `AuthContext` — Supabase Auth (PKCE) num development build Android real (EAS + emulador). Bug corrigido em 03/09/2026: `exchangeCodeForSession` esperava só o código de autorização, não a URL de retorno inteira — ver `CLAUDE.md`, item 12. Continua verdade que o Expo Go não serve pra esse fluxo (seção 9 do `CLAUDE.md`) — só o dev build funciona |
+| RF-007 | Fazer login com conta Google | ✅ Conectado ao Supabase, validado de ponta a ponta | `app/login.tsx`, `app/oauth-callback.tsx`, `AuthContext` — Supabase Auth (PKCE) num development build Android real (EAS + emulador). Bug corrigido em 03/09/2026: `exchangeCodeForSession` esperava só o código de autorização, não a URL de retorno inteira — ver `PROJETO.md`, item 12. Continua verdade que o Expo Go não serve pra esse fluxo (seção 9 do `PROJETO.md`) — só o dev build funciona |
 | RF-008 | Editar perfil e trocar foto de perfil | ✅ Conectado ao Supabase (branch `feature/perfil-admin`, 04/09/2026) | `app/(tabs)/profile.tsx` → `profileService.updateProfile()` grava nome/bio/interesses; foto sobe pro bucket `avatars` via nova `profileService.uploadAvatar()` (mesmo padrão de `uploadPropertyImage`). `AuthContext` passou a carregar `bio/interests/phone/created_at` de `profiles` e ganhou `refreshUser()`. `GuestDashboard` trocou os 3 números fixos ("Avaliação 4.9/Viagens 12/Membro desde 2023", iguais pra qualquer hóspede) por dados reais (avaliações escritas, reservas concluídas, ano de cadastro) |
 | RF-009 | Avaliar hospedagens após estadia | ✅ Conectado ao Supabase | `app/review.tsx`, botão "Avaliar" em `app/(tabs)/bookings.tsx`, reviews reais exibidas em `app/details.tsx` |
 | RF-010 | Administradores gerenciarem denúncias e aprovações de anúncios | ✅ Conectado ao Supabase | `app/admin-dashboard.tsx` → `adminService` — estatísticas, aprovação de anúncios e denúncias reais. Ranking de mais reservadas (`getTopProperties`), histórico Aprovadas/Reprovadas e toggle de destaque (`setFeatured`, coluna `properties.featured`) conectados em 04/09/2026 (branch `feature/perfil-admin`) — só a Explorar ainda não *consome* `featured` pro hóspede ver (deliberadamente fora do escopo dessa branch) |
@@ -177,7 +177,7 @@ pra destacar cabanas pro hóspede — só o lado admin (marcar/desmarcar) está 
 |---|---|---|---|
 | RNF-001 | Usabilidade — acessível a diferentes níveis de familiaridade | ⚠️ Parcial | Loading/erro/vazio tratados nas telas conectadas ao Supabase (Explorar, Detalhes, Anfitrião, Avaliações, Admin); ausente nas telas ainda não conectadas (Mensagens, Notificações, Favoritos, Perfil) |
 | RNF-002 | Manter dados locais (reservas e favoritos) mesmo offline | ✅ Implementado | `BookingContext` e `FavoritesContext` guardam AsyncStorage como cache offline; ambos sincronizam com o Supabase quando online e caem pro cache local quando a query falha ou o usuário é o estático de dev |
-| RNF-003 | Garantir segurança básica de autenticação e login | ✅ Implementado, com uma ressalva conhecida | RLS habilitado em todas as tabelas; migração fechando escalação de privilégio via `profiles.role` (troca de role só via RPC `set_own_role`); segredos fora do versionamento. Ressalva: PKCE usa `code_challenge_method=plain` em vez de `s256` por limitação do runtime RN/Hermes (não bloqueante, documentado em `CLAUDE.md`) |
+| RNF-003 | Garantir segurança básica de autenticação e login | ✅ Implementado, com uma ressalva conhecida | RLS habilitado em todas as tabelas; migração fechando escalação de privilégio via `profiles.role` (troca de role só via RPC `set_own_role`); segredos fora do versionamento. Ressalva: PKCE usa `code_challenge_method=plain` em vez de `s256` por limitação do runtime RN/Hermes (não bloqueante, documentado em `PROJETO.md`) |
 | RNF-004 | Carregar rapidamente, evitar travamentos (meta < 300ms) | ⚠️ Não medido formalmente | Filtros da Explorar memoizados (`useMemo`); banco com índices (`gin`/`trgm` para busca textual, `btree` para preço/status/isolamento) — mas sem testes de carga ou medição de tempo de resposta feitos até agora |
 | RNF-005 | Consistência visual entre modo claro e escuro | ❌ Não implementado de fato | `constants/Colors.ts` define paletas light/dark e `components/Themed.tsx` existe, mas a maioria das telas usa cores fixas (`#2D5A27` etc.) direto no `StyleSheet`, não os tokens de tema — não há alternância funcional de tema no app |
 | RNF-006 | Comunicação confiável e rastreável entre usuários | ✅ Implementado | Chat real (RF-006) com Realtime (mensagens chegam na hora, com dedupe do eco da própria mensagem), leitura marcada por mensagem (`read_at`) e integrada ao contador de notificações |
