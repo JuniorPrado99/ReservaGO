@@ -1,6 +1,6 @@
-# CLAUDE.md — ReservaGO
+# ReservaGO — Documentação do Projeto
 
-Este arquivo orienta o Claude Code (e qualquer sessão futura) sobre a estrutura real deste projeto. Ele foi gerado a partir da leitura direta do código-fonte em 2026-08-21 — não do README, que contém informações desatualizadas (ver seção "Divergências conhecidas").
+Este arquivo documenta a estrutura real deste projeto, escrito a partir da leitura direta do código-fonte em 2026-08-21 — não do README, que contém informações desatualizadas (ver seção "Divergências conhecidas").
 
 **Nota (2026-08-28):** as seções 1 a 7 abaixo descrevem o estado do código em 21/08 — várias telas foram conectadas ao Supabase depois disso. O estado atual e verificado (tela a tela, RF a RF) está em `docs/material-tcc.md` (gerado em 22/08, mais novo que este arquivo). A seção 8 já foi revisada nesta data e os itens resolvidos estão marcados com **[RESOLVIDA]**.
 
@@ -285,9 +285,9 @@ npx expo start --dev-client --clear
 
 ## 10. Requisitos do TCC — numeração oficial
 
-Esta numeração vem do documento oficial do TCC (não deste repositório) — confirmada pelo usuário
-em 2026-08-22. Registrado aqui pra nenhuma sessão futura inferir uma numeração própria de novo. O
-status de cada um (conectado/mock/bloqueado) é o que muda a cada sessão — ver `docs/material-tcc.md`
+Esta numeração vem do documento oficial do TCC (não deste repositório), confirmada em 2026-08-22.
+Registrada aqui como referência canônica, pra não haver divergência de numeração. O status de cada
+um (conectado/mock/bloqueado) é o que muda ao longo do desenvolvimento — ver `docs/material-tcc.md`
 para o status atualizado; esta tabela é só a numeração/texto, que não muda.
 
 ### Requisitos Funcionais (RF)
@@ -319,13 +319,8 @@ para o status atualizado; esta tabela é só a numeração/texto, que não muda.
 
 ---
 
-## 11. REGRAS PERMANENTES para todas as sessões neste projeto
+## 11. Convenções ao mexer no projeto
 
-1. Nunca altere arquivos que eu não pedi explicitamente.
-2. Sempre me mostre o plano antes de escrever código.
-3. Sempre me entregue arquivos completos, prontos para colar, nunca trechos soltos.
-4. Sempre indique o caminho exato de cada arquivo.
-5. Sempre me diga quais comandos rodar no PowerShell (Windows), na ordem.
-6. Nunca invente nomes de tabelas ou colunas — confira sempre no `supabase/schema.sql`.
-7. Se algo estiver ambíguo, pergunte antes de assumir.
-8. Responda sempre em português.
+- Nunca inventar nomes de tabelas ou colunas — conferir sempre no `supabase/schema.sql`.
+- Comandos de terminal são em PowerShell (Windows).
+- Strings de negócio em português (`'reservada'`, `'hospede'`, `'anfitriao'`), consistente entre o schema SQL e o front-end.

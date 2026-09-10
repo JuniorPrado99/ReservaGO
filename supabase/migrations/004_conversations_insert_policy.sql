@@ -11,7 +11,7 @@
 -- Conferido em supabase/schema.sql: a tabela `conversations` só tinha UMA
 -- policy no total - "conversations_participant_read" (SELECT). Não existe
 -- (e nunca existiu) nenhuma policy de INSERT. Com RLS habilitado (está,
--- desde a correção registrada no CLAUDE.md item 11) e nenhuma policy de
+-- desde a correção registrada no PROJETO.md item 11) e nenhuma policy de
 -- INSERT, o Postgres nega por padrão - ou seja, hoje NENHUM client
 -- consegue criar uma conversa nova, nem esse fluxo nem nenhum outro.
 --

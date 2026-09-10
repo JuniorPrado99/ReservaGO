@@ -228,7 +228,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!user) return;
 
     // Grava de verdade em profiles.role via RPC set_own_role (antes só
-    // trocava em memória - ver CLAUDE.md). Para os usuários estáticos de dev
+    // trocava em memória - ver PROJETO.md). Para os usuários estáticos de dev
     // (STATIC_USERS, ids "static-*") não existe linha em profiles, então
     // isso falha por design nesse caso específico - é esperado, esse login
     // fake não passa de __DEV__ e nunca vai pra produção.
